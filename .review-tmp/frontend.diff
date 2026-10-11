@@ -1,0 +1,1731 @@
+﻿diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/App.tsx" "b/D:\\deepseek harness\\frontend\\src/App.tsx"
+index 11a1def..050c88f 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/App.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/App.tsx"	
+@@ -55,6 +55,7 @@ export function App() {
+   const { toast, show } = useToast()
+ 
+   const [view, setView] = useState<View>('today')
++  useEffect(() => { window.scrollTo(0, 0) }, [view])
+   const [phase, setPhase] = useState<Phase>('loading')
+   const [error, setError] = useState<string | null>(null)
+ 
+@@ -62,6 +63,10 @@ export function App() {
+   const [history, setHistory] = useState<HistoryItem[]>([])
+   const [garden, setGarden] = useState<GardenData | null>(null)
+   const [explored, setExplored] = useState<ExploredRecord | null>(null)
++  const [gardenPhase, setGardenPhase] = useState<Phase>('loading')
++  const [gardenError, setGardenError] = useState<string | null>(null)
++  const [exploredPhase, setExploredPhase] = useState<Phase>('loading')
++  const [exploredError, setExploredError] = useState<string | null>(null)
+ 
+   const [keeping, setKeeping] = useState(false)
+   const [drawing, setDrawing] = useState(false)
+@@ -138,12 +143,16 @@ export function App() {
+ 
+   /** 花园单独拉：它只在进花园页时才需要，但每次操作后都要重新对账 */
+   const loadGarden = useCallback(async () => {
++    setGardenPhase('loading')
++    setGardenError(null)
+     try {
+       setGarden(await fetchGarden())
++      setGardenPhase('ready')
+     } catch (e) {
+-      if (!(e instanceof ApiError && e.status === 401)) fail(e)
++      setGardenError(e instanceof Error ? e.message : '花园暂时没能加载')
++      setGardenPhase('error')
+     }
+-  }, [fail])
++  }, [])
+ 
+   useEffect(() => {
+     if (view === 'garden') void loadGarden()
+@@ -151,12 +160,16 @@ export function App() {
+ 
+   /** 走过的：和花园一样，只在进这一页时才拉，之后每次留住/补留都对账 */
+   const loadExplored = useCallback(async () => {
++    setExploredPhase('loading')
++    setExploredError(null)
+     try {
+       setExplored(await fetchExplored())
++      setExploredPhase('ready')
+     } catch (e) {
+-      if (!(e instanceof ApiError && e.status === 401)) fail(e)
++      setExploredError(e instanceof Error ? e.message : '探索记录暂时没能加载')
++      setExploredPhase('error')
+     }
+-  }, [fail])
++  }, [])
+ 
+   useEffect(() => {
+     if (view === 'explored') void loadExplored()
+@@ -184,6 +197,7 @@ export function App() {
+     try {
+       const updated = await drawToday()
+       setToday(updated)
++      void reloadHistory()
+       setJustKeptCardId(null)
+       tapFeedback()
+     } catch (e) {
+@@ -191,9 +205,10 @@ export function App() {
+     } finally {
+       setDrawing(false)
+     }
+-  }, [drawing, show])
++  }, [drawing, reloadHistory, show])
+ 
+-  const doKeep = useCallback(async () => {    if (keeping) return
++  const doKeep = useCallback(async () => {
++    if (keeping) return
+     setKeeping(true)
+     try {
+       const updated = await keepToday()
+@@ -201,7 +216,7 @@ export function App() {
+       tapFeedback()
+       const hint = noteKeep(updated.cardId)
+       setJustKeptCardId(updated.cardId)
+-      await Promise.all([reloadHistory(), loadGarden(), loadExplored()])
++      void reloadHistory()
+       // 同步码提示：只在第一次留着之后提一次，可永久关闭（§0.2）
+       if (hint.firstKeep && shouldShowSyncHint()) setSyncHintOpen(true)
+     } catch (e) {
+@@ -209,7 +224,7 @@ export function App() {
+     } finally {
+       setKeeping(false)
+     }
+-  }, [keeping, reloadHistory, loadGarden, loadExplored, show])
++  }, [keeping, reloadHistory, show])
+ 
+   const doKeepPast = useCallback(
+     async (assignmentId: number) => {
+@@ -221,7 +236,6 @@ export function App() {
+         )
+         tapFeedback()
+         setJustKeptCardId(updated.cardId)
+-        await Promise.all([loadGarden(), loadExplored()])
+         show('补上了')
+       } catch (e) {
+         show(e instanceof Error ? e.message : '这张补不了', 'warn')
+@@ -229,7 +243,7 @@ export function App() {
+         setKeepingPastId(null)
+       }
+     },
+-    [loadGarden, loadExplored, show],
++    [show],
+   )
+ 
+   const doIndulge = useCallback(async () => {
+@@ -246,11 +260,13 @@ export function App() {
+     async (cardId: number) => {
+       setGraduating(true)
+       try {
+-        await graduateApi(cardId) // 幂等：重复调用也 200，graduatedAt 不覆盖
++        const graduated = await graduateApi(cardId)
+         await loadGarden()
+         setJustKeptCardId(null)
++        return graduated
+       } catch (e) {
+         show(e instanceof Error ? e.message : '没能毕业，再试一次', 'warn')
++        return null
+       } finally {
+         setGraduating(false)
+       }
+@@ -284,19 +300,20 @@ export function App() {
+           drawing={drawing}
+           keepingPastId={keepingPastId}
+           justKeptCardId={justKeptCardId}
+-          onRetry={() => void load()}
++          onRetry={() => setRegisterKey((key) => key + 1)}
+           onDraw={() => void doDraw()}
+           onKeep={() => void doKeep()}
+           onIndulge={() => void doIndulge()}
+           onKeepPast={(id) => void doKeepPast(id)}
+           onSeeGarden={() => setView('garden')}
++          onSeeExplored={() => setView('explored')}
+         />
+       )}
+ 
+       {view === 'garden' && (
+         <Garden
+-          phase={garden ? 'ready' : phase}
+-          error={error}
++          phase={gardenPhase}
++          error={gardenError}
+           garden={garden}
+           justKeptCardId={justKeptCardId}
+           graduating={graduating}
+@@ -309,8 +326,8 @@ export function App() {
+ 
+       {view === 'explored' && (
+         <Explored
+-          phase={explored ? 'ready' : phase}
+-          error={error}
++          phase={exploredPhase}
++          error={exploredError}
+           explored={explored}
+           onRetry={() => void loadExplored()}
+           onGoToday={() => setView('today')}
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/api/client.ts" "b/D:\\deepseek harness\\frontend\\src/api/client.ts"
+index fdd0329..26f3a17 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/api/client.ts"	
++++ "b/D:\\deepseek harness\\frontend\\src/api/client.ts"	
+@@ -61,7 +61,9 @@ export function bootstrapDevice(): Promise<string> {
+         }
+         return id
+       })
+-      .catch(async () => {
++      .catch(async (error: unknown) => {
++        // 网络或服务器故障不能被解释为身份失效，否则短暂离线会丢掉原账号。
++        if (!(error instanceof ApiError) || !((error.status === 400 && !id) || error.status === 401)) throw error
+         // 这个 ID 没能建上（空值、被后端拒、或库被重置）：换一个干净的再试一次
+         const fresh = newDeviceId()
+         const info = await createSession(fresh)
+@@ -69,6 +71,10 @@ export function bootstrapDevice(): Promise<string> {
+         saveDeviceId(info.deviceId ?? fresh)
+         return info.deviceId ?? fresh
+       })
++      .catch((error: unknown) => {
++        booting = null // 不缓存被拒绝的 Promise，让「再试一次」可以恢复
++        throw error
++      })
+   }
+   return booting
+ }
+@@ -98,6 +104,7 @@ export function repairDevice(badId: string): Promise<string> {
+   })()
+ 
+   repairing.set(badId, p)
++  void p.catch(() => repairing.delete(badId))
+   return p
+ }
+ 
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/AsyncArea.tsx" "b/D:\\deepseek harness\\frontend\\src/components/AsyncArea.tsx"
+index 6037e21..090e98e 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/AsyncArea.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/AsyncArea.tsx"	
+@@ -22,12 +22,12 @@ export function AsyncArea({ phase, error, onRetry, skeleton, children }: Props)
+ 
+   if (phase === 'error') {
+     return (
+-      <div className="view--center" style={{ padding: '40px 0' }}>
++      <div className="error-state" role="alert">
+         <p className="title" style={{ fontSize: 19 }}>
+-          连不上后端
++          暂时没能连上
+         </p>
+         <p className="lede" style={{ maxWidth: 340 }}>
+-          {error ?? '服务没有回应。后端跑起来之后，点下面再试一次。'}
++          {error ?? '等网络恢复后，再试一次。你的记录还在。'}
+         </p>
+         {onRetry && (
+           <button type="button" className="btn btn--ghost" onClick={onRetry}>
+diff --git "a/D:\\deepseek harness\\frontend\\src/components/Icon.tsx" "b/D:\\deepseek harness\\frontend\\src/components/Icon.tsx"
+new file mode 100644
+index 0000000..d01e6ba
+--- /dev/null
++++ "b/D:\\deepseek harness\\frontend\\src/components/Icon.tsx"	
+@@ -0,0 +1,29 @@
++import type { CSSProperties, ReactNode } from 'react'
++
++export type IconName = 'sun' | 'plant' | 'path' | 'settings' | 'arrow' | 'leaf'
++const paths: Record<IconName, ReactNode> = {
++  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></>,
++  plant: <path d="M8 15h8l-1 7H9l-1-7Zm4 0V8M12 11C6 12 4 8 4 4c5 0 8 2 8 7Zm0-2c0-5 3-7 8-7 0 5-3 8-8 7Z" />,
++  path: <><path d="M6 21c-6-6 13-6 12-12" /><circle cx="7" cy="5" r="3" /><path d="M7 8v3m11-5V2m-2 2h4" /></>,
++  settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="3" fill="var(--bg)" /><circle cx="15" cy="17" r="3" fill="var(--bg)" /></>,
++  arrow: <path d="M4 12h15m-6-6 6 6-6 6" />,
++  leaf: <path d="M5 19C-1 8 10 2 21 3c0 11-5 19-16 16ZM5 19 16 8" />,
++}
++export function Icon({ name, size = 22, style }: { name: IconName; size?: number; style?: CSSProperties }) {
++  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}>{paths[name]}</svg>
++}
++
++/** 本地矢量插画，缩放不模糊，也不需要额外请求。 */
++export function SeedIllustration({ small = false }: { small?: boolean }) {
++  return (
++    <svg className={small ? 'seed-art seed-art--small' : 'seed-art'} viewBox="0 0 260 210" fill="none" aria-hidden="true">
++      <circle cx="130" cy="101" r="84" fill="#eee9d9" /><circle cx="183" cy="49" r="19" fill="#dfac74" />
++      <path d="M38 169h184M62 177h137" stroke="#c9c6b2" strokeLinecap="round" /><ellipse cx="130" cy="171" rx="50" ry="6" fill="#dbd4c1" />
++      <path d="M130 123c0-27-2-42 3-67" stroke="#47664b" strokeWidth="3" strokeLinecap="round" />
++      <path d="M131 97C98 97 87 78 86 59c29 1 46 17 45 38Z" fill="#7c9364" /><path d="M131 76c-1-28 15-43 39-45 2 26-13 43-39 45Z" fill="#3f6249" /><path d="M130 110c5-28 23-39 46-35-5 25-24 37-46 35Z" fill="#a5af7c" />
++      <path d="m99 72 30 24m8-26 21-25m-21 59 26-19" stroke="#f6f1df" strokeOpacity=".45" strokeLinecap="round" />
++      <path d="m104 126 7 38c1 4 37 4 38 0l7-38" fill="#bc775a" /><path d="m111 132 5 28m6-26 2 27" stroke="#d99a7b" strokeWidth="3" strokeLinecap="round" /><rect x="100" y="119" width="60" height="12" rx="4" fill="#ce8c6b" />
++      <path d="m55 114 3-7 3 7 7 3-7 3-3 7-3-7-7-3 7-3Z" fill="#bba679" /><path d="M197 129v9m-4-4h8" stroke="#8c9a79" strokeWidth="1.5" strokeLinecap="round" />
++    </svg>
++  )
++}
+diff --git "a/D:\\deepseek harness\\frontend\\src/components/PageHeading.tsx" "b/D:\\deepseek harness\\frontend\\src/components/PageHeading.tsx"
+new file mode 100644
+index 0000000..04149a8
+--- /dev/null
++++ "b/D:\\deepseek harness\\frontend\\src/components/PageHeading.tsx"	
+@@ -0,0 +1,3 @@
++export function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
++  return <header className="page-heading"><span className="kicker">{eyebrow}</span><h1>{title}</h1><p className="lede">{description}</p></header>
++}
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/Pot.tsx" "b/D:\\deepseek harness\\frontend\\src/components/Pot.tsx"
+index 95e2604..32f0b37 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/Pot.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/Pot.tsx"	
+@@ -40,7 +40,9 @@ export function Pot({ plant, onTap, justKept = false }: Props) {
+         </span>
+       </span>
+       <span className="pot__meta">
+-        <span className="pot__count">{plant.keptCount}</span>
++        <span className="pot__category">{plant.category}</span>
++        <span className="pot__text">{plant.text}</span>
++        <span className="pot__count">留住 {plant.keptCount} 次</span>
+         {plant.readyToGraduate && (
+           <span className="pot__ready" title="留得够久了，这个选项现在有意义了">
+             ✦
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/ShareSheet.tsx" "b/D:\\deepseek harness\\frontend\\src/components/ShareSheet.tsx"
+index 1ba1ec0..bbeefd9 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/ShareSheet.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/ShareSheet.tsx"	
+@@ -1,7 +1,7 @@
+ /**
+  * 毕业卡：把刚宣布毕业的那一盆画成一张图。
+  *
+- * 「高级感」在这里的落法是**克制**——一张深色卡片、一句原文、一行数据，
++ * 纸张底色、一句原文、一行数据，与应用的视觉保持一致，
+  * 没有二维码、没有"快来用"的口号。分享图是留给用户自己的形状，不是广告位。
+  */
+ import { useEffect, useRef, useState } from 'react'
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/Sheet.tsx" "b/D:\\deepseek harness\\frontend\\src/components/Sheet.tsx"
+index f783559..4a26123 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/Sheet.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/Sheet.tsx"	
+@@ -1,6 +1,9 @@
+ /** 底部弹层外壳：遮罩、Esc 关闭、打开时锁住页面滚动 */
+ import { useEffect, useRef, type ReactNode } from 'react'
+ 
++const openSheets: HTMLDivElement[] = []
++let previousOverflow = ''
++
+ interface Props {
+   open: boolean
+   onClose: () => void
+@@ -10,22 +13,45 @@ interface Props {
+ 
+ export function Sheet({ open, onClose, labelledBy, children }: Props) {
+   const sheetRef = useRef<HTMLDivElement>(null)
++  const onCloseRef = useRef(onClose)
++  onCloseRef.current = onClose
+ 
+   useEffect(() => {
+-    if (!open) return
++    const sheet = sheetRef.current
++    if (!open || !sheet) return
++    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
++    if (openSheets.length === 0) {
++      previousOverflow = document.body.style.overflow
++      document.body.style.overflow = 'hidden'
++    }
++    openSheets.push(sheet)
+     const onKey = (e: KeyboardEvent) => {
+-      if (e.key === 'Escape') onClose()
++      if (openSheets[openSheets.length - 1] !== sheet) return
++      if (e.key === 'Escape') {
++        e.preventDefault()
++        onCloseRef.current()
++      }
++      if (e.key === 'Tab') {
++        const focusable = [...sheet.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')]
++          .filter(element => element.getClientRects().length > 0)
++        const first = focusable[0]
++        const last = focusable[focusable.length - 1]
++        if (!first) { e.preventDefault(); sheet.focus() }
++        else if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet)) { e.preventDefault(); last?.focus() }
++        else if (!e.shiftKey && (document.activeElement === last || document.activeElement === sheet)) { e.preventDefault(); first.focus() }
++      }
+     }
+     document.addEventListener('keydown', onKey)
+-    const previous = document.body.style.overflow
+-    document.body.style.overflow = 'hidden'
+     // 弹层内没有可聚焦元素时，焦点留在弹层上，读屏不会跑回背景
+-    sheetRef.current?.focus()
++    sheet.focus()
+     return () => {
+       document.removeEventListener('keydown', onKey)
+-      document.body.style.overflow = previous
++      const wasTop = openSheets[openSheets.length - 1] === sheet
++      openSheets.splice(openSheets.indexOf(sheet), 1)
++      if (openSheets.length === 0) document.body.style.overflow = previousOverflow
++      if (wasTop && previousFocus?.isConnected) previousFocus.focus()
+     }
+-  }, [open, onClose])
++  }, [open])
+ 
+   if (!open) return null
+ 
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/SyncCodeSheet.tsx" "b/D:\\deepseek harness\\frontend\\src/components/SyncCodeSheet.tsx"
+index 1d92cdf..390a293 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/SyncCodeSheet.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/SyncCodeSheet.tsx"	
+@@ -36,7 +36,7 @@ export function SyncCodeSheet({ open, syncCode, onAcknowledge, onTurnOff, onToas
+       <div className="sheet__head">
+         <div>
+           <h2 className="sheet__title" id="sync-title">
+-            把这句话记住
++            给花园留一把钥匙
+           </h2>
+           <p className="sheet__sub">只提这一次</p>
+         </div>
+@@ -47,8 +47,8 @@ export function SyncCodeSheet({ open, syncCode, onAcknowledge, onTurnOff, onToas
+       </div>
+ 
+       <p className="lede" style={{ marginTop: 18 }}>
+-        这串码是你找回这些卡的唯一凭据。它只存在这台设备上，后端不保存原文——
+-        所以如果你清了浏览器缓存、又从来没把它记下来，这些卡就真的找不回来了。
++        请把同步码单独保存。换手机或清除网站数据后，可以用它找回你的卡片。
++        如果网站数据和同步码都丢了，就无法找回了。请勿把它分享给别人。
+       </p>
+ 
+       <div className="sheet__actions">
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/TabBar.tsx" "b/D:\\deepseek harness\\frontend\\src/components/TabBar.tsx"
+index 2112a3b..f8fee5b 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/components/TabBar.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/components/TabBar.tsx"	
+@@ -4,17 +4,20 @@
+  * 刻意不引入路由库——四页用状态切换就够，还省掉一个依赖和一份配置。
+  * 注意这里**没有红点、没有角标**（红线 1：不做监工）。
+  */
++import { Icon, type IconName } from './Icon'
+ export type View = 'today' | 'garden' | 'explored' | 'settings'
+ 
+-const TABS: { id: View; label: string }[] = [
+-  { id: 'today', label: '今天' },
+-  { id: 'garden', label: '花园' },
+-  { id: 'explored', label: '走过的' },
+-  { id: 'settings', label: '设置' },
++const TABS: { id: View; label: string; icon: IconName }[] = [
++  { id: 'today', label: '今天', icon: 'sun' },
++  { id: 'garden', label: '花园', icon: 'plant' },
++  { id: 'explored', label: '走过的', icon: 'path' },
++  { id: 'settings', label: '设置', icon: 'settings' },
+ ]
+ 
+ export function TabBar({ view, onChange }: { view: View; onChange: (next: View) => void }) {
+   return (
++    <aside className="navigation">
++      <div className="brand"><span className="brand__symbol"><Icon name="plant" size={26} /></span><div>每日一粒<span className="brand__english">DAILYSEED</span></div></div>
+     <nav className="tabbar" aria-label="主导航">
+       {TABS.map((tab) => (
+         <button
+@@ -24,10 +27,12 @@ export function TabBar({ view, onChange }: { view: View; onChange: (next: View)
+           aria-current={view === tab.id ? 'page' : undefined}
+           onClick={() => onChange(tab.id)}
+         >
++          <Icon name={tab.icon} /><span>{tab.label}</span>
+           <span className="tab__mark" aria-hidden="true" />
+-          {tab.label}
+         </button>
+       ))}
+     </nav>
++      <div className="navigation__note"><Icon name="leaf" size={28} /><p>慢慢来，<br />生活会长出自己的样子。</p><span>一粒种子，一点日常。</span></div>
++    </aside>
+   )
+ }
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/lib/shareCard.ts" "b/D:\\deepseek harness\\frontend\\src/lib/shareCard.ts"
+index 9c05559..0ffbc00 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/lib/shareCard.ts"	
++++ "b/D:\\deepseek harness\\frontend\\src/lib/shareCard.ts"	
+@@ -72,10 +72,10 @@ export function drawGraduationCard(canvas: HTMLCanvasElement, input: DrawInput):
+ 
+   const FAMILY = '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
+ 
+-  // 底：深色 + 两处极淡的光
++  // 与应用一致的纸张底色
+   const bg = ctx.createLinearGradient(0, 0, W, H)
+-  bg.addColorStop(0, '#0c1013')
+-  bg.addColorStop(1, '#07090b')
++  bg.addColorStop(0, '#f8f7f2')
++  bg.addColorStop(1, '#eeeee2')
+   ctx.fillStyle = bg
+   ctx.fillRect(0, 0, W, H)
+ 
+@@ -99,20 +99,20 @@ export function drawGraduationCard(canvas: HTMLCanvasElement, input: DrawInput):
+   const cardH = 900
+ 
+   ctx.save()
+-  ctx.shadowColor = 'rgba(0,0,0,0.55)'
++  ctx.shadowColor = 'rgba(50,65,44,0.10)'
+   ctx.shadowBlur = 60
+   ctx.shadowOffsetY = 26
+   roundRect(ctx, cardX, cardY, cardW, cardH, 46)
+   const cardFill = ctx.createLinearGradient(cardX, cardY, cardX, cardY + cardH)
+-  cardFill.addColorStop(0, 'rgba(255,255,255,0.085)')
+-  cardFill.addColorStop(1, 'rgba(255,255,255,0.035)')
++  cardFill.addColorStop(0, '#fffefb')
++  cardFill.addColorStop(1, '#fffdf7')
+   ctx.fillStyle = cardFill
+   ctx.fill()
+   ctx.restore()
+ 
+   ctx.save()
+   roundRect(ctx, cardX, cardY, cardW, cardH, 46)
+-  ctx.strokeStyle = 'rgba(255,255,255,0.13)'
++  ctx.strokeStyle = '#dedfce'
+   ctx.lineWidth = 2
+   ctx.stroke()
+   ctx.restore()
+@@ -126,13 +126,13 @@ export function drawGraduationCard(canvas: HTMLCanvasElement, input: DrawInput):
+   ctx.fillRect(cardX + 60, cardY - 1, cardW - 120, 2)
+ 
+   // 顶部小标
+-  ctx.fillStyle = '#e9c46a'
++  ctx.fillStyle = '#956638'
+   ctx.font = `600 30px ${FAMILY}`
+   ctx.textAlign = 'center'
+   ctx.fillText('这粒已经长成我的习惯了', W / 2, 122)
+ 
+   // 卡面文字
+-  ctx.fillStyle = '#f2f5f3'
++  ctx.fillStyle = '#293f34'
+   ctx.font = `600 64px ${FAMILY}`
+   ctx.textAlign = 'left'
+   const lines = wrap(ctx, input.text, cardW - 140)
+@@ -144,38 +144,38 @@ export function drawGraduationCard(canvas: HTMLCanvasElement, input: DrawInput):
+ 
+   // 中部细线
+   y += 26
+-  ctx.fillStyle = 'rgba(255,255,255,0.12)'
++  ctx.fillStyle = '#dedfce'
+   ctx.fillRect(cardX + 70, y, cardW - 140, 1)
+ 
+   // 数据行
+   y += 76
+-  ctx.fillStyle = '#a9b4b0'
++  ctx.fillStyle = '#5c695e'
+   ctx.font = `400 34px ${FAMILY}`
+   ctx.fillText(`${input.category} · 留住 ${input.keptCount} 次`, cardX + 70, y)
+ 
+   y += 62
+-  ctx.fillStyle = '#6d7975'
++  ctx.fillStyle = '#73776b'
+   ctx.font = `400 32px ${FAMILY}`
+   ctx.fillText(`${formatDate(input.graduatedDate)} 宣布毕业`, cardX + 70, y)
+ 
+   // 一盆长成的植株（简单几何，和前端那个盆同一套语言）
+   const cx = W / 2
+   const baseY = cardY + cardH - 118
+-  ctx.fillStyle = 'rgba(255,255,255,0.09)'
++  ctx.fillStyle = '#dbd4c1'
+   ctx.beginPath()
+   ctx.ellipse(cx, baseY + 74, 116, 20, 0, 0, Math.PI * 2)
+   ctx.fill()
+ 
+   const bowl = ctx.createLinearGradient(cx - 70, baseY, cx + 70, baseY + 90)
+-  bowl.addColorStop(0, 'rgba(255,255,255,0.24)')
+-  bowl.addColorStop(1, 'rgba(255,255,255,0.07)')
++  bowl.addColorStop(0, '#d69b79')
++  bowl.addColorStop(1, '#b57758')
+   ctx.fillStyle = bowl
+   roundRect(ctx, cx - 66, baseY, 132, 86, 20)
+   ctx.fill()
+ 
+   const leaf = ctx.createLinearGradient(cx, baseY - 160, cx, baseY)
+-  leaf.addColorStop(0, '#5fd8a4')
+-  leaf.addColorStop(1, '#2f9d72')
++  leaf.addColorStop(0, '#7c9364')
++  leaf.addColorStop(1, '#45664b')
+   ctx.fillStyle = leaf
+   const drawLeaf = (angle: number, scale: number, alpha: number) => {
+     ctx.save()
+@@ -193,7 +193,7 @@ export function drawGraduationCard(canvas: HTMLCanvasElement, input: DrawInput):
+ 
+   // 底部产品名：只写名字，不写口号
+   ctx.textAlign = 'center'
+-  ctx.fillStyle = 'rgba(255,255,255,0.34)'
++  ctx.fillStyle = '#73776b'
+   ctx.font = `500 32px ${FAMILY}`
+   ctx.fillText('每日一粒 · DailySeed', W / 2, H - 96)
+ }
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Explored.tsx" "b/D:\\deepseek harness\\frontend\\src/pages/Explored.tsx"
+index c13d39f..300024e 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Explored.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/pages/Explored.tsx"	
+@@ -15,6 +15,8 @@ import { useState } from 'react'
+ import { AsyncArea, type Phase } from '../components/AsyncArea'
+ import { EvidenceSheet } from '../components/EvidenceSheet'
+ import { Tappable } from '../components/Tappable'
++import { Icon } from '../components/Icon'
++import { PageHeading } from '../components/PageHeading'
+ import { formatMonthDay, formatRelativeDay, todayIso } from '../lib/format'
+ import type { ExploredCard, ExploredRecord } from '../api/types'
+ 
+@@ -77,6 +79,7 @@ export function Explored({ phase, error, explored, onRetry, onGoToday }: Props)
+ 
+   return (
+     <section className="view" aria-label="走过的">
++      <PageHeading eyebrow="LITTLE DISCOVERIES" title="走过的，都是风景。" description="换一条路，看一点新鲜，收藏日常里的偶然。" />
+       <AsyncArea
+         phase={phase}
+         error={error}
+@@ -105,7 +108,7 @@ export function Explored({ phase, error, explored, onRetry, onGoToday }: Props)
+             </header>
+ 
+             {explored.items.length === 0 ? (
+-              <div className="panel">
++              <div className="panel empty-trail"><Icon name="path" size={48} />
+                 <p className="muted" style={{ margin: 0 }}>
+                   这里会安安静静地攒着。抽到探索卡的那天，它就出现在这儿。
+                 </p>
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Garden.tsx" "b/D:\\deepseek harness\\frontend\\src/pages/Garden.tsx"
+index 3a8c3a8..c33beee 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Garden.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/pages/Garden.tsx"	
+@@ -12,6 +12,8 @@ import { AsyncArea, type Phase } from '../components/AsyncArea'
+ import { EvidenceSheet } from '../components/EvidenceSheet'
+ import { GraduateConfirm } from '../components/GraduateConfirm'
+ import { Pot } from '../components/Pot'
++import { SeedIllustration } from '../components/Icon'
++import { PageHeading } from '../components/PageHeading'
+ import { Sheet } from '../components/Sheet'
+ import { Tappable } from '../components/Tappable'
+ import { formatDateTimeStamp, keptCountLabel } from '../lib/format'
+@@ -25,7 +27,7 @@ interface Props {
+   graduating: boolean
+   onRetry: () => void
+   onGoToday: () => void
+-  onGraduate: (cardId: number) => Promise<void>
++  onGraduate: (cardId: number) => Promise<Plant | null>
+   onShare: (plant: Plant) => void
+ }
+ 
+@@ -52,8 +54,8 @@ export function Garden({
+ 
+   const confirmGraduate = async () => {
+     if (!confirming) return
+-    await onGraduate(confirming.cardId)
+-    const done = confirming
++    const done = await onGraduate(confirming.cardId)
++    if (!done) return
+     setConfirming(null)
+     setOpened(null)
+     onShare(done)
+@@ -61,6 +63,7 @@ export function Garden({
+ 
+   return (
+     <section className="view" aria-label="花园">
++      <PageHeading eyebrow="YOUR LITTLE GARDEN" title="日子在这里，慢慢长大。" description="那些被你留下的小事，成了窗台上的风景。" />
+       <AsyncArea
+         phase={phase}
+         error={error}
+@@ -86,11 +89,11 @@ export function Garden({
+             <section aria-label="窗台">
+               <div className="sill">
+                 {garden.items.length === 0 ? (
+-                  <p className="sill__empty">
++                  <div className="sill__empty"><SeedIllustration small /><p>
+                     空的窗台不着急。
+                     <br />
+                     今天那一粒如果觉得好，留住它，这里就多一盆。
+-                  </p>
++                  </p></div>
+                 ) : (
+                   <div className="sill__grid">
+                     {garden.items.map((plant) => (
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Settings.tsx" "b/D:\\deepseek harness\\frontend\\src/pages/Settings.tsx"
+index 2983b4d..243b5a7 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Settings.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/pages/Settings.tsx"	
+@@ -10,6 +10,7 @@
+  */
+ import { useState } from 'react'
+ import { copyText } from '../lib/format'
++import { PageHeading } from '../components/PageHeading'
+ 
+ interface Props {
+   syncCode: string | null
+@@ -32,9 +33,7 @@ export function Settings({ syncCode, deviceId, onToast, onRestore, onRemind }: P
+ 
+   return (
+     <section className="view" aria-label="设置">
+-      <header className="today__greeting">
+-        <span className="kicker">设置</span>
+-      </header>
++      <PageHeading eyebrow="MAKE YOURSELF AT HOME" title="照自己的习惯来。" description="保管你的花园，也留一点空间给自己。" />
+ 
+       <section aria-label="同步码">
+         <div className="section-head">
+@@ -59,8 +58,7 @@ export function Settings({ syncCode, deviceId, onToast, onRestore, onRemind }: P
+         )}
+ 
+         <p className="muted" style={{ marginTop: 14 }}>
+-          这串码只存在这台设备上，服务端只保存它的哈希、不保存原文。
+-          清了浏览器缓存、又从来没记过它，数据就找不回来了——这是"零注册"必须付出的代价。
++          把同步码保存到一个安心的地方。换手机或清除网站数据后，可以用它找回你的花园。请勿分享给别人。
+         </p>
+       </section>
+ 
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Today.tsx" "b/D:\\deepseek harness\\frontend\\src/pages/Today.tsx"
+index 3373364..9e5c599 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/pages/Today.tsx"	
++++ "b/D:\\deepseek harness\\frontend\\src/pages/Today.tsx"	
+@@ -10,6 +10,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
+ import { CardMeta } from '../components/CardMeta'
+ import { AsyncArea, type Phase } from '../components/AsyncArea'
+ import { EvidenceSheet } from '../components/EvidenceSheet'
++import { Icon, SeedIllustration } from '../components/Icon'
++import { PageHeading } from '../components/PageHeading'
+ import type { HistoryItem, Today as TodayCard } from '../api/types'
+ import { formatRelativeDay, todayIso } from '../lib/format'
+ 
+@@ -30,6 +32,7 @@ interface Props {
+   onIndulge: () => void
+   onKeepPast: (assignmentId: number) => void
+   onSeeGarden: () => void
++  onSeeExplored: () => void
+ }
+ 
+ export function Today({
+@@ -47,6 +50,7 @@ export function Today({
+   onIndulge,
+   onKeepPast,
+   onSeeGarden,
++  onSeeExplored,
+ }: Props) {
+   /**
+    * 是否按"卡面"画。
+@@ -87,7 +91,8 @@ export function Today({
+   }, [whyFrom, today, past])
+ 
+   return (
+-    <section className="view" aria-label="今天">
++    <section className="view view--today" aria-label="今天">
++      <PageHeading eyebrow="A LITTLE EVERY DAY" title="给日常，一点新意。" description="每天一个小小的约定，按自己的节奏来。" />
+       <AsyncArea
+         phase={phase}
+         error={error}
+@@ -103,21 +108,22 @@ export function Today({
+         {today && (
+           <div className="today__stage">
+             <header className="today__greeting">
+-              <span className="kicker">今天这一粒</span>
+-              <span className="today__date">{today.date}</span>
++              <span className="kicker"><Icon name="sun" size={17} /> 今天这一粒</span>
++              <time className="today__date" dateTime={today.date}>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(`${today.date}T12:00:00`))}</time>
+             </header>
+ 
+             <div className="flip">
+               <div className={`flip__inner${faceUp ? ' is-revealed' : ''}`}>
+-                <div className="flip__face flip__back">
++                <div className="flip__face flip__back" aria-hidden={faceUp}>
+                   <div className="cardback">
+-                    <span className="cardback__seed" aria-hidden="true" />
+-                    <span className="cardback__kicker">今天这一粒</span>
+-                    <span className="cardback__hint">点一下，看是什么</span>
++                    <SeedIllustration />
++                    <span className="cardback__kicker">一件小事，也会慢慢发芽。</span>
++                    <span className="cardback__hint">今天会遇见什么呢？</span>
++                    {!faceUp && <button type="button" className="btn btn--primary" onClick={onDraw} disabled={drawing} aria-label="抽今天这一粒">{drawing ? '正在打开…' : '打开今天这一粒'}<Icon name="arrow" size={18} /></button>}
+                   </div>
+                 </div>
+ 
+-                <div className="flip__face flip__front">
++                <div className="flip__face flip__front" aria-hidden={!faceUp}>
+                   <article
+                     key={`${today.cardId}-${today.drawCount}`}
+                     className={`today__card${swapped ? ' today__card--swap' : ''}`}
+@@ -125,12 +131,14 @@ export function Today({
+                   >
+                     <CardMeta type={today.type} category={today.category} difficulty={today.difficulty} />
+ 
+-                    <h1 className="today__text">{today.text}</h1>
++                    <h2 className="today__text">{today.text}</h2>
++                    <div className="today__card-signature"><Icon name="leaf" size={20} /><span>一点点，也很好。</span></div>
+ 
+                     {today.evidence && (
+                       <button
+                         type="button"
+                         className="why"
++                        tabIndex={faceUp ? 0 : -1}
+                         style={{ marginTop: 20 }}
+                         onClick={() => {
+                           setWhyFrom('today')
+@@ -147,20 +155,6 @@ export function Today({
+                 </div>
+               </div>
+ 
+-              {!faceUp && (
+-                <button
+-                  type="button"
+-                  className="flip__tap"
+-                  onClick={onDraw}
+-                  disabled={drawing}
+-                  aria-label="抽今天这一粒"
+-                >
+-                  <span className="flip__tap-glyph" aria-hidden="true">
+-                    ↻
+-                  </span>
+-                  抽
+-                </button>
+-              )}
+             </div>
+ 
+             {/* 抽完才出现动作。卡背状态下只有一个动作：抽 */}
+@@ -175,7 +169,7 @@ export function Today({
+                     <span className="today__kept-icon" aria-hidden="true">
+                       ✓
+                     </span>
+-                    <span>已经留住了。它在窗台上。</span>
++                    <span>{today.type === 'EXPLORE' ? '已经留住了。这段经历在「走过的」里。' : '已经留住了。它在窗台上。'}</span>
+                   </div>
+                 ) : (
+                   <button
+@@ -189,8 +183,8 @@ export function Today({
+                 )}
+ 
+                 {today.kept && today.type !== 'INDULGE' && (
+-                  <button type="button" className="btn btn--ghost btn--block" onClick={onSeeGarden}>
+-                    去看看它在哪
++                  <button type="button" className="btn btn--ghost btn--block" onClick={today.type === 'EXPLORE' ? onSeeExplored : onSeeGarden}>
++                    {today.type === 'EXPLORE' ? '去看看走过的路' : '去花园看看'}<Icon name="arrow" size={18} />
+                   </button>
+                 )}
+ 
+@@ -210,7 +204,7 @@ export function Today({
+ 
+             {justKeptCardId !== null && (
+               <p className="muted" style={{ textAlign: 'center' }}>
+-                留着不是打卡。你只是把它留下了，明天还会遇见它。
++                {today.type === 'EXPLORE' ? '留下一次小小的探索，日常也有了新的风景。' : '留着不是打卡。觉得好的，就让它慢慢长大。'}
+               </p>
+             )}
+           </div>
+@@ -281,6 +275,7 @@ export function Today({
+             今天想放纵
+           </button>
+         )}
++        <footer className="daily-note"><Icon name="leaf" size={19} /><span>想做就做，觉得好就留下。<br />今天不想做，也没关系。</span></footer>
+       </AsyncArea>
+ 
+       <EvidenceSheet
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/styles/base.css" "b/D:\\deepseek harness\\frontend\\src/styles/base.css"
+index 077f13a..1124a7e 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/styles/base.css"	
++++ "b/D:\\deepseek harness\\frontend\\src/styles/base.css"	
+@@ -1,519 +1,102 @@
++/* DailySeed · 温暖的纸张、植物与日常。 */
+ :root {
+-  /* ---- 底色：偏冷的近黑，留一点绿，避免廉价纯灰 ---- */
+-  --bg: #0a0c0f;
+-  --bg-deep: #06070a;
+-
+-  /* ---- 层次：靠"表面 + 极淡描边"堆出来，不靠阴影堆 ---- */
+-  --surface-1: rgba(255, 255, 255, 0.035);
+-  --surface-2: rgba(255, 255, 255, 0.058);
+-  --surface-3: rgba(255, 255, 255, 0.085);
+-  --edge: rgba(255, 255, 255, 0.085);
+-  --edge-strong: rgba(255, 255, 255, 0.16);
+-
+-  /* ---- 文字：三级足够，再多就乱 ---- */
+-  --ink: #f2f5f3;
+-  --ink-2: #a9b4b0;
+-  --ink-3: #6d7975;
+-
+-  /* ---- 种子绿：全站唯一强调色 ---- */
+-  --seed: #5fd8a4;
+-  --seed-deep: #2f9d72;
+-  --seed-glow: rgba(95, 216, 164, 0.22);
+-  --seed-ink: #04231a;
+-
+-  /* ---- 毕业/收获暖色：只在"毕业"这一刻出现 ---- */
+-  --harvest: #e9c46a;
+-  --harvest-glow: rgba(233, 196, 106, 0.2);
+-
+-  --danger: #f0736a;
+-
+-  /* ---- 圆角 ---- */
+-  --r-sm: 10px;
+-  --r-md: 16px;
+-  --r-lg: 24px;
+-  --r-pill: 999px;
+-
+-  /* ---- 曲线：一条主缓动，全站统一，才有"高级感" ---- */
+-  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+-  --ease-out-back: cubic-bezier(0.34, 1.4, 0.64, 1);
+-  --t-fast: 160ms;
+-  --t-base: 260ms;
+-  --t-slow: 420ms;
+-
+-  --pad: 22px;
+-  --tabbar: 64px;
+-
+-  color-scheme: dark;
+-}
+-
+-/* ============================================================
+-   基础
+-   ============================================================ */
+-
+-*,
+-*::before,
+-*::after {
+-  box-sizing: border-box;
+-  -webkit-tap-highlight-color: transparent;
+-}
+-
+-html,
+-body,
+-#root {
+-  height: 100%;
+-}
+-
+-body {
+-  margin: 0;
+-  background: var(--bg-deep);
+-  color: var(--ink);
+-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+-    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+-  font-size: 16px;
+-  line-height: 1.6;
+-  -webkit-font-smoothing: antialiased;
+-  text-rendering: optimizeLegibility;
+-  overscroll-behavior-y: none;
+-}
+-
+-button {
+-  font: inherit;
+-  color: inherit;
+-  background: none;
+-  border: none;
+-  padding: 0;
+-  cursor: pointer;
+-}
+-
+-:focus-visible {
+-  outline: 2px solid var(--seed);
+-  outline-offset: 3px;
+-  border-radius: 4px;
+-}
+-
+-/* ============================================================
+-   应用外壳
+-   ============================================================ */
+-
+-.app {
+-  position: relative;
+-  display: flex;
+-  flex-direction: column;
+-  min-height: 100%;
+-  background:
+-    radial-gradient(120% 62% at 50% -12%, rgba(95, 216, 164, 0.09), transparent 62%),
+-    radial-gradient(90% 50% at 100% 108%, rgba(233, 196, 106, 0.045), transparent 60%),
+-    var(--bg);
+-}
+-
+-/* 页面切换：淡入 + 轻微上浮，全站只有这一种进场 */
+-.view {
+-  flex: 1;
+-  display: flex;
+-  flex-direction: column;
+-  gap: 26px;
+-  width: 100%;
+-  max-width: 620px;
+-  margin: 0 auto;
+-  padding: calc(env(safe-area-inset-top) + 34px) var(--pad)
+-    calc(var(--tabbar) + env(safe-area-inset-bottom) + 34px);
+-}
+-
+-.view--center {
+-  justify-content: center;
+-  align-items: center;
+-  text-align: center;
+-  gap: 18px;
+-}
+-
+-.kicker {
+-  font-size: 12px;
+-  letter-spacing: 0.16em;
+-  text-transform: uppercase;
+-  color: var(--ink-3);
+-  font-weight: 600;
+-}
+-
+-.title {
+-  margin: 0;
+-  font-size: 27px;
+-  line-height: 1.34;
+-  font-weight: 640;
+-  letter-spacing: -0.01em;
+-}
+-
+-.lede {
+-  margin: 0;
+-  color: var(--ink-2);
+-  font-size: 14.5px;
+-  line-height: 1.75;
+-}
+-
+-.muted {
+-  color: var(--ink-3);
+-  font-size: 13px;
+-  line-height: 1.7;
+-}
+-
+-.section-head {
+-  display: flex;
+-  align-items: baseline;
+-  justify-content: space-between;
+-  gap: 12px;
+-  margin-bottom: 14px;
+-}
+-
+-.section-head h2 {
+-  margin: 0;
+-  font-size: 15px;
+-  font-weight: 620;
+-  letter-spacing: 0.01em;
+-}
+-
+-.section-head span {
+-  color: var(--ink-3);
+-  font-size: 12.5px;
+-}
+-
+-/* ============================================================
+-   按钮
+-   ============================================================ */
+-
+-.btn {
+-  display: inline-flex;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 9px;
+-  min-height: 52px;
+-  padding: 0 24px;
+-  border-radius: var(--r-pill);
+-  font-size: 16px;
+-  font-weight: 600;
+-  letter-spacing: 0.01em;
+-  transition: transform var(--t-fast) var(--ease), background var(--t-base) var(--ease),
+-    box-shadow var(--t-base) var(--ease), color var(--t-base) var(--ease), border-color var(--t-base) var(--ease);
+-}
+-
+-.btn:active:not(:disabled) {
+-  transform: scale(0.972);
+-}
+-
+-.btn:disabled {
+-  opacity: 0.5;
+-  cursor: default;
+-}
+-
+-.btn--primary {
+-  background: linear-gradient(180deg, var(--seed) 0%, var(--seed-deep) 100%);
+-  color: var(--seed-ink);
+-  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.32), 0 14px 34px -16px var(--seed-glow);
+-}
+-
+-.btn--primary:hover:not(:disabled) {
+-  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.44), 0 18px 40px -14px var(--seed-glow);
+-}
+-
+-/* 已经留住：不再用高饱和色，改成"安静的完成态"——它不该继续吸引点击 */
+-.btn--done {
+-  background: var(--surface-2);
+-  color: var(--ink-2);
+-  box-shadow: inset 0 0 0 1px var(--edge);
+-}
+-
+-.btn--ghost {
+-  background: var(--surface-1);
+-  color: var(--ink-2);
+-  box-shadow: inset 0 0 0 1px var(--edge);
+-}
+-
+-.btn--ghost:hover:not(:disabled) {
+-  background: var(--surface-2);
+-  color: var(--ink);
+-}
+-
+-.btn--quiet {
+-  min-height: 40px;
+-  padding: 0 14px;
+-  font-size: 13.5px;
+-  font-weight: 500;
+-  color: var(--ink-3);
+-}
+-
+-.btn--quiet:hover {
+-  color: var(--ink-2);
+-}
+-
+-.btn--danger {
+-  color: var(--danger);
+-}
+-
+-.btn--block {
+-  width: 100%;
+-}
+-
+-/* ============================================================
+-   卡片 / 面板
+-   ============================================================ */
+-
+-.panel {
+-  position: relative;
+-  padding: 20px;
+-  border-radius: var(--r-md);
+-  background: var(--surface-1);
+-  box-shadow: inset 0 0 0 1px var(--edge);
+-}
+-
+-.chip {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 6px;
+-  padding: 4px 10px;
+-  border-radius: var(--r-pill);
+-  background: var(--surface-2);
+-  box-shadow: inset 0 0 0 1px var(--edge);
+-  color: var(--ink-2);
+-  font-size: 12px;
+-  font-weight: 500;
+-  white-space: nowrap;
+-}
+-
+-.chip--seed {
+-  color: var(--seed);
+-  background: rgba(95, 216, 164, 0.1);
+-  box-shadow: inset 0 0 0 1px rgba(95, 216, 164, 0.22);
+-}
+-
+-.chip--harvest {
+-  color: var(--harvest);
+-  background: var(--harvest-glow);
+-  box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.24);
+-}
+-
+-.dot-sep {
+-  color: var(--ink-3);
+-  opacity: 0.6;
+-}
+-
+-/* ============================================================
+-   标签栏
+-   ============================================================ */
+-
+-.tabbar {
+-  position: fixed;
+-  left: 0;
+-  right: 0;
+-  bottom: 0;
+-  z-index: 40;
+-  display: flex;
+-  justify-content: center;
+-  gap: 4px;
+-  padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
+-  background: rgba(8, 10, 13, 0.82);
+-  backdrop-filter: blur(18px) saturate(150%);
+-  -webkit-backdrop-filter: blur(18px) saturate(150%);
+-  border-top: 1px solid var(--edge);
+-}
+-
+-.tab {
+-  flex: 1;
+-  max-width: 132px;
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  gap: 3px;
+-  padding: 8px 0 7px;
+-  border-radius: var(--r-sm);
+-  color: var(--ink-3);
+-  font-size: 11px;
+-  font-weight: 550;
+-  letter-spacing: 0.02em;
+-  transition: color var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+-}
+-
+-.tab:active {
+-  transform: scale(0.94);
+-}
+-
+-.tab[aria-current='page'] {
+-  color: var(--seed);
+-}
+-
+-.tab__mark {
+-  display: block;
+-  width: 5px;
+-  height: 5px;
+-  border-radius: 50%;
+-  background: currentColor;
+-  opacity: 0;
+-  transition: opacity var(--t-base) var(--ease), transform var(--t-base) var(--ease-out-back);
+-  transform: scale(0.4);
+-}
+-
+-.tab[aria-current='page'] .tab__mark {
+-  opacity: 1;
+-  transform: scale(1);
+-}
+-
+-/* ============================================================
+-   骨架 / 引导屏
+-   ============================================================ */
+-
+-.skeleton {
+-  border-radius: var(--r-md);
+-  background: linear-gradient(
+-    100deg,
+-    var(--surface-1) 30%,
+-    var(--surface-2) 48%,
+-    var(--surface-1) 66%
+-  );
+-  background-size: 260% 100%;
+-  animation: shimmer 1.5s linear infinite;
+-}
+-
+-.boot {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  gap: 20px;
+-}
+-
+-.boot__seed {
+-  width: 58px;
+-  height: 58px;
+-  border-radius: 46% 54% 52% 48% / 54% 46% 54% 46%;
+-  background: linear-gradient(150deg, var(--seed), var(--seed-deep));
+-  box-shadow: 0 0 42px -6px var(--seed-glow);
+-  animation: breathe 2.6s var(--ease) infinite;
+-}
+-
+-/* ============================================================
+-   提示条
+-   ============================================================ */
+-
+-.toast {
+-  position: fixed;
+-  left: 50%;
+-  bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 18px);
+-  z-index: 60;
+-  max-width: min(560px, calc(100vw - 32px));
+-  padding: 11px 18px;
+-  border-radius: var(--r-pill);
+-  background: rgba(20, 24, 26, 0.94);
+-  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 18px 40px -20px rgba(0, 0, 0, 0.9);
+-  backdrop-filter: blur(14px);
+-  -webkit-backdrop-filter: blur(14px);
+-  color: var(--ink);
+-  font-size: 14px;
+-  text-align: center;
+-  animation: toast-in var(--t-base) var(--ease-out-back);
+-}
+-
+-.toast--warn {
+-  color: #ffd9d4;
+-  box-shadow: inset 0 0 0 1px rgba(240, 115, 106, 0.42), 0 18px 40px -20px rgba(0, 0, 0, 0.9);
+-}
+-
+-/* ============================================================
+-   动效关键帧
+-   ============================================================ */
+-
+-@keyframes rise {
+-  from {
+-    opacity: 0;
+-    transform: translateY(9px);
+-  }
+-  to {
+-    opacity: 1;
+-    transform: none;
+-  }
+-}
+-
+-@keyframes shimmer {
+-  from {
+-    background-position: 160% 0;
+-  }
+-  to {
+-    background-position: -60% 0;
+-  }
+-}
+-
+-@keyframes breathe {
+-  0%,
+-  100% {
+-    transform: scale(1);
+-    opacity: 0.92;
+-  }
+-  50% {
+-    transform: scale(1.06);
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes pop {
+-  0% {
+-    transform: scale(0.86);
+-    opacity: 0;
+-  }
+-  62% {
+-    transform: scale(1.035);
+-    opacity: 1;
+-  }
+-  100% {
+-    transform: scale(1);
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes toast-in {
+-  from {
+-    opacity: 0;
+-    transform: translate(-50%, 10px);
+-  }
+-  to {
+-    opacity: 1;
+-    transform: translate(-50%, 0);
+-  }
+-}
+-
+-@keyframes sheet-in {
+-  from {
+-    transform: translateY(3%);
+-    opacity: 0;
+-  }
+-  to {
+-    transform: none;
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes fade-in {
+-  from {
+-    opacity: 0;
+-  }
+-  to {
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes glow-pulse {
+-  0% {
+-    box-shadow: 0 0 0 0 var(--seed-glow);
+-  }
+-  100% {
+-    box-shadow: 0 0 0 22px rgba(95, 216, 164, 0);
+-  }
+-}
+-
+-/* ============================================================
+-   无障碍：系统开了"减少动态效果"就全部关掉
+-   ============================================================ */
+-
++  --bg: #f8f7f2; --bg-deep: #f0efe7;
++  --surface-1: #fffefb; --surface-2: #eeeee4; --surface-3: #e5e9db;
++  --edge: #e5e5d9; --edge-strong: #d0d6c5;
++  --ink: #293f34; --ink-2: #5c695e; --ink-3: #73776b;
++  --seed: #45664b; --seed-deep: #34513b; --seed-glow: #dce6d3; --seed-ink: #fffef6;
++  --harvest: #956638; --harvest-glow: #f3e8d8; --danger: #ac4c3d;
++  --r-sm: 12px; --r-md: 18px; --r-lg: 24px; --r-pill: 999px;
++  --ease: cubic-bezier(.22,.61,.36,1); --ease-out-back: cubic-bezier(.34,1.4,.64,1);
++  --t-fast: 160ms; --t-base: 260ms; --t-slow: 420ms;
++  --pad: 24px; --tabbar: 76px;
++  --serif: 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', serif;
++  color-scheme: light;
++}
++*, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
++html, body, #root { min-height: 100%; margin: 0; }
++body { background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 15px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
++button { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; }
++button:disabled { cursor: default; }
++:focus-visible { outline: 2px solid var(--seed); outline-offset: 4px; }
++svg { flex-shrink: 0; }
++.app { min-height: 100dvh; }
++.view { display: flex; flex-direction: column; gap: 28px; width: 100%; max-width: 760px; margin: 0 auto; padding: 100px var(--pad) calc(var(--tabbar) + env(safe-area-inset-bottom) + 30px); }
++.view--center { min-height: 100dvh; justify-content: center; align-items: center; text-align: center; }
++.page-heading { margin-bottom: 4px; }
++.page-heading h1 { font-family: var(--serif); font-size: clamp(28px, 4vw, 38px); line-height: 1.5; font-weight: 500; letter-spacing: .035em; margin: 10px 0 9px; }
++.kicker { display: inline-flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: .18em; color: var(--ink-3); font-weight: 600; }
++.title { margin: 0; font-size: 27px; line-height: 1.4; font-weight: 600; }
++.lede { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.85; }
++.muted { color: var(--ink-3); font-size: 13px; line-height: 1.8; }
++.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
++.section-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
++.section-head span { color: var(--ink-3); font-size: 12px; }
++.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 24px; border: 1px solid transparent; border-radius: var(--r-sm); font-size: 14px; font-weight: 550; transition: background var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast); }
++.btn:active:not(:disabled) { transform: translateY(1px); }
++.btn:disabled { opacity: .55; }
++.btn--primary { background: var(--seed); color: var(--seed-ink); box-shadow: 0 5px 12px #344c3510; }
++.btn--primary:hover:not(:disabled) { background: var(--seed-deep); box-shadow: 0 5px 15px #344c3525; }
++.btn--ghost, .btn--done { background: var(--surface-1); color: var(--ink-2); border-color: var(--edge); }
++.btn--ghost:hover:not(:disabled) { background: var(--surface-2); }
++.btn--quiet { min-height: 44px; padding: 0 14px; font-size: 13px; font-weight: 500; }
++.btn--danger { color: var(--danger); }
++.btn--block { width: 100%; }
++.panel { padding: 24px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface-1); }
++.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--ink-2); font-size: 12px; white-space: nowrap; }
++.chip--seed { background: #e8edde; color: var(--seed); }
++.chip--harvest { background: var(--harvest-glow); color: var(--harvest); }
++.dot-sep { color: var(--ink-3); opacity: .6; }
++.brand { display: flex; align-items: center; gap: 11px; font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1.4; }
++.brand__symbol { display: grid; place-items: center; width: 43px; height: 43px; background: #e8ecdf; border-radius: 14px; color: var(--seed); }
++.brand__english { display: block; font: 9px/1.8 -apple-system, sans-serif; letter-spacing: .22em; color: var(--ink-3); margin-top: 2px; }
++.navigation > .brand { position: absolute; top: calc(20px + env(safe-area-inset-top)); left: var(--pad); }
++.navigation__note { display: none; }
++.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; justify-content: center; gap: 4px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); background: #fafaf5f5; backdrop-filter: blur(16px); border-top: 1px solid var(--edge); }
++.tab { flex: 1; max-width: 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 56px; padding: 7px 0; border-radius: 12px; color: var(--ink-3); font-size: 11px; transition: background var(--t-fast), color var(--t-fast); }
++.tab[aria-current='page'] { background: #e9eddf; color: var(--seed-deep); }
++.tab:hover { color: var(--seed); }
++.tab__mark { display: none; }
++.skeleton { border-radius: var(--r-md); background: linear-gradient(100deg, #eeeee5 30%, #e6e8dc 48%, #eeeee5 66%); background-size: 260% 100%; animation: shimmer 1.5s linear infinite; }
++.boot { display: flex; flex-direction: column; align-items: center; gap: 20px; }
++.boot__seed { width: 36px; height: 50px; border-radius: 80% 20% 75% 25%; background: var(--seed); animation: breathe 2.6s var(--ease) infinite; }
++.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 18px); z-index: 70; width: max-content; max-width: calc(100vw - 32px); padding: 12px 20px; border-radius: var(--r-sm); background: #2c4438; color: #fffefb; font-size: 14px; text-align: center; box-shadow: 0 6px 22px #293f3424; animation: toast-in var(--t-base) var(--ease); }
++.toast--warn { background: #794438; }
++.error-state { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 40px 20px; text-align: center; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface-1); }
++.seed-art { display: block; width: 230px; max-width: 80%; height: auto; }
++.seed-art--small { width: 180px; margin: 0 auto; }
++.daily-note { display: flex; justify-content: center; align-items: flex-start; gap: 12px; padding: 5px 0 10px; color: var(--ink-3); font-size: 12px; line-height: 1.85; }
++.daily-note svg { margin-top: 3px; color: #879777; }
++@media (min-width: 960px) {
++  .app { padding-left: 240px; }
++  .navigation { position: fixed; inset: 0 auto 0 0; width: 240px; padding: 44px 26px; background: #f0f1e9; border-right: 1px solid var(--edge); display: flex; flex-direction: column; }
++  .navigation > .brand { position: static; padding: 0 7px; }
++  .tabbar { position: static; display: flex; flex-direction: column; background: transparent; border: none; padding: 0; margin-top: 62px; gap: 10px; }
++  .tab { flex: none; max-width: none; flex-direction: row; justify-content: flex-start; gap: 15px; min-height: 50px; padding: 12px 18px; font-size: 14px; }
++  .tab[aria-current='page'] { background: #dfe6d4; }
++  .tab__mark { display: block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-left: auto; opacity: 0; }
++  .tab[aria-current='page'] .tab__mark { opacity: 1; }
++  .navigation__note { display: block; margin-top: auto; padding: 44px 12px 0; color: #75826b; }
++  .navigation__note p { font-family: var(--serif); font-size: 16px; line-height: 1.9; margin: 15px 0; }
++  .navigation__note span { font-size: 11px; color: var(--ink-3); }
++  .view { padding-top: 60px; padding-bottom: 45px; max-width: 820px; padding-inline: 54px; }
++  .view--today { max-width: 850px; }
++  .page-heading { margin-bottom: 16px; }
++  .toast { left: calc(50% + 120px); bottom: 28px; }
++}
++@media (max-width: 420px) {
++  :root { --pad: 20px; }
++  .view { gap: 22px; }
++  .page-heading h1 { font-size: 27px; }
++  .page-heading .lede { font-size: 12.5px; }
++}
++@keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
++@keyframes shimmer { from { background-position: 160% 0; } to { background-position: -60% 0; } }
++@keyframes breathe { 50% { transform: rotate(6deg); } }
++@keyframes pop { from { transform: scale(.86); opacity: 0; } to { transform: scale(1); opacity: 1; } }
++@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
++@keyframes sheet-in { from { transform: translateY(3%); opacity: 0; } to { transform: none; opacity: 1; } }
++@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+ @media (prefers-reduced-motion: reduce) {
+-  *,
+-  *::before,
+-  *::after {
+-    animation-duration: 0.001ms !important;
+-    animation-iteration-count: 1 !important;
+-    transition-duration: 0.001ms !important;
+-  }
++  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+ }
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/styles/components.css" "b/D:\\deepseek harness\\frontend\\src/styles/components.css"
+index 1188113..6ca63c9 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\frontend-src/styles/components.css"	
++++ "b/D:\\deepseek harness\\frontend\\src/styles/components.css"	
+@@ -9,7 +9,7 @@
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+-  background: rgba(4, 5, 7, 0.62);
++  background: rgba(30, 44, 33, 0.32);
+   backdrop-filter: blur(7px) saturate(120%);
+   -webkit-backdrop-filter: blur(7px) saturate(120%);
+   animation: fade-in var(--t-base) var(--ease);
+@@ -23,7 +23,7 @@
+   overscroll-behavior: contain;
+   padding: 10px var(--pad) calc(env(safe-area-inset-bottom) + 28px);
+   border-radius: var(--r-lg) var(--r-lg) 0 0;
+-  background: linear-gradient(180deg, #14181b 0%, #0d1013 100%);
++  background: var(--bg);
+   box-shadow: inset 0 1px 0 var(--edge-strong), 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+   animation: sheet-in var(--t-slow) var(--ease);
+ }
+@@ -61,8 +61,8 @@
+   flex: none;
+   display: grid;
+   place-items: center;
+-  width: 34px;
+-  height: 34px;
++  width: 44px;
++  height: 44px;
+   border-radius: 50%;
+   background: var(--surface-2);
+   color: var(--ink-2);
+@@ -196,14 +196,14 @@
+ .sill {
+   padding: 20px 16px 0;
+   border-radius: var(--r-md);
+-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 70%);
++  background: #eeeee3;
+   box-shadow: inset 0 0 0 1px var(--edge);
+ }
+ 
+ .sill__grid {
+   display: grid;
+-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+-  gap: 6px 4px;
++  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
++  gap: 16px;
+   padding-bottom: 18px;
+   border-bottom: 1px solid var(--edge);
+ }
+@@ -221,7 +221,9 @@
+   flex-direction: column;
+   align-items: center;
+   gap: 7px;
+-  padding: 8px 2px 4px;
++  padding: 16px 12px;
++  background: var(--surface-1);
++  border: 1px solid var(--edge);
+   border-radius: var(--r-sm);
+   transition: background var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+ }
+@@ -239,7 +241,7 @@
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+-  height: 54px;
++  height: 86px;
+   width: 100%;
+ }
+ 
+@@ -247,13 +249,13 @@
+   position: absolute;
+   bottom: 0;
+   border-radius: 50%;
+-  background: rgba(255, 255, 255, 0.07);
++  background: #d5cbb9;
+ }
+ 
+ .pot__bowl {
+   position: relative;
+   border-radius: 8px 8px 13px 13px / 6px 6px 17px 17px;
+-  background: linear-gradient(168deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.055));
++  background: linear-gradient(168deg, #d69b79, #b57758);
+   box-shadow: inset 0 -5px 9px -5px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+ }
+ 
+@@ -370,7 +372,7 @@
+ .pot__count {
+   font-size: 12.5px;
+   font-weight: 620;
+-  color: var(--ink-2);
++  color: var(--ink-3);
+   font-variant-numeric: tabular-nums;
+ }
+ 
+@@ -587,96 +589,14 @@
+ }
+ 
+ .cardback {
+-  display: flex;
+-  flex-direction: column;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 18px;
+-  height: 100%;
+-  /* 与 .today__card 同一个最小高度：翻面时卡片不会长高，末段就不会跳一下 */
+-  min-height: 226px;
+-  padding: 34px 24px;
+-  border-radius: var(--r-lg);
+-  background:
+-    radial-gradient(120% 100% at 50% 0%, rgba(95, 216, 164, 0.1), transparent 62%),
+-    linear-gradient(180deg, var(--surface-2), var(--surface-1));
+-  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 28px 60px -34px rgba(0, 0, 0, 0.95);
+-  overflow: hidden;
+-}
+-
+-/* 和 .today__card::before 同一道强调线：卡背与正面是同一张卡的两面 */
+-.cardback::before {
+-  content: '';
+-  position: absolute;
+-  inset: 0 0 auto;
+-  height: 1px;
+-  background: linear-gradient(90deg, transparent, var(--seed), transparent);
+-  opacity: 0.5;
+-}
+-
+-/* 一颗种子：细细的呼吸，暗示"还没长出来" */
+-.cardback__seed {
+-  width: 54px;
+-  height: 54px;
+-  border-radius: 50%;
+-  background: linear-gradient(150deg, var(--seed), var(--seed-deep));
+-  box-shadow: 0 0 42px -6px var(--seed-glow);
+-  animation: breathe 2.6s var(--ease) infinite;
+-}
+-
+-.cardback__kicker {
+-  font-size: 12px;
+-  letter-spacing: 0.16em;
+-  text-transform: uppercase;
+-  color: var(--ink-3);
+-}
+-
+-.cardback__hint {
+-  font-size: 15px;
+-  color: var(--ink-2);
+-}
+-
+-/* 「抽」按钮：压在卡背正中偏下，是卡背唯一的动作 */
+-.flip__tap {
+-  position: absolute;
+-  left: 50%;
+-  bottom: 26px;
+-  transform: translateX(-50%);
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 8px;
+-  padding: 11px 24px;
+-  border: 0;
+-  border-radius: var(--r-pill);
+-  background: linear-gradient(180deg, var(--seed) 0%, var(--seed-deep) 100%);
+-  color: var(--seed-ink);
+-  font-size: 15px;
+-  font-weight: 600;
+-  font-family: inherit;
+-  cursor: pointer;
+-  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.32), 0 14px 34px -16px var(--seed-glow);
+-  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease),
+-    opacity var(--t-base) var(--ease);
+-}
+-
+-.flip__tap:hover:not(:disabled) {
+-  transform: translateX(-50%) translateY(-1px);
+-  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.44), 0 18px 40px -14px var(--seed-glow);
+-}
+-
+-.flip__tap:active:not(:disabled) {
+-  transform: translateX(-50%) translateY(1px) scale(0.985);
+-}
+-
+-.flip__tap:disabled {
+-  opacity: 0.55;
+-  cursor: default;
+-}
+-
+-.flip__tap-glyph {
+-  font-size: 16px;
+-  line-height: 1;
++  display: flex; flex-direction: column; align-items: center; justify-content: center;
++  gap: 10px; height: 100%; min-height: 400px; padding: 28px 24px 34px;
++  border: 1px solid #dedfce; border-radius: var(--r-lg); background: #f0f1e6;
++  box-shadow: 0 12px 28px -24px #384c35;
+ }
++.cardback__kicker { font-family: var(--serif); font-size: 23px; color: var(--ink); }
++.cardback__hint { font-size: 13px; color: var(--ink-3); margin-bottom: 12px; }
++.flip__back[aria-hidden='true'], .flip__front[aria-hidden='true'] { pointer-events: none; }
+ 
+ /* 重抽：刻意比「留住它」轻一档 —— 换一张是次要动作，不该抢主按钮 */
+ .today__redraw {
+@@ -700,28 +620,13 @@
+ }
+ 
+ .today__card {
+-  position: relative;
+-  /* 与 .cardback 对齐：两面同高，翻面时卡片不会长高 */
+-  min-height: 226px;
+-  padding: 26px 22px 24px;
+-  border-radius: var(--r-lg);
+-  background:
+-    radial-gradient(120% 100% at 0% 0%, rgba(95, 216, 164, 0.075), transparent 58%),
+-    linear-gradient(180deg, var(--surface-2), var(--surface-1));
+-  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 28px 60px -34px rgba(0, 0, 0, 0.95);
+-  overflow: hidden;
++  position: relative; display: flex; flex-direction: column; justify-content: center;
++  min-height: 400px; padding: 36px; border: 1px solid var(--edge-strong);
++  border-radius: var(--r-lg); background: var(--surface-1);
++  box-shadow: 0 12px 28px -24px #384c35; overflow: hidden;
+ }
+-
+-/* 顶部一道极细的强调线，是"被选中"的暗示，不写文案 */
+-.today__card::before {
+-  content: '';
+-  position: absolute;
+-  inset: 0 0 auto;
+-  height: 1px;
+-  background: linear-gradient(90deg, transparent, var(--seed), transparent);
+-  opacity: 0.5;
+-}
+-
++.today__card::before { content: ''; position: absolute; inset: 24px 24px auto; border-top: 1px solid var(--edge); }
++.today__card-signature { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-family: var(--serif); font-size: 14px; margin-top: 24px; }
+ .today__meta {
+   display: flex;
+   align-items: center;
+@@ -732,8 +637,9 @@
+ 
+ .today__text {
+   margin: 0;
+-  font-size: 25px;
+-  line-height: 1.46;
++  font-family: var(--serif);
++  font-size: 30px;
++  line-height: 1.7;
+   font-weight: 600;
+   letter-spacing: -0.005em;
+ }
+@@ -742,7 +648,7 @@
+   display: flex;
+   flex-direction: column;
+   gap: 11px;
+-  margin-top: 22px;
++  margin-top: 2px;
+ }
+ 
+ .today__kept {
+@@ -916,7 +822,8 @@
+   gap: 8px;
+ }
+ 
+-.chip {
++.remind__presets .chip {
++  min-height: 44px;
+   padding: 9px 15px;
+   border-radius: var(--r-pill);
+   background: var(--surface-1);
+@@ -970,6 +877,36 @@
+ 
+ /* 时间控件是系统画的，给个统一的着色，别让它跳出色板 */
+ .remind__time input[type='time']::-webkit-calendar-picker-indicator {
+-  filter: invert(0.75);
++  opacity: .7;
+   cursor: pointer;
+ }
++
++/* 与品牌色一致的阅读、空态和植物标签。 */
++.today__stage > .today__greeting { flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; }
++.pot__category { font-size: 11px; color: var(--seed); }
++.pot__bowl, .pot__saucer { transform: scale(1.4); transform-origin: center bottom; }
++.pot__text { font-size: 13px; line-height: 1.6; margin: 4px 0 8px; }
++.pot__meta { gap: 2px; }
++.pot__ready { margin-top: 5px; }
++.sill__empty { margin: 0; padding-top: 10px; }
++.sill__empty p { margin-top: 0; }
++.trail-list { background: var(--surface-1); border: 1px solid var(--edge); border-radius: var(--r-md); padding: 14px 20px 14px 43px; }
++.trail-list::before { left: 26px; }
++.trail__meta { flex-wrap: wrap; }
++.empty-trail { text-align: center; padding: 42px 28px; }
++.empty-trail > svg { color: #869875; margin-bottom: 20px; }
++.why { min-height: 44px; }
++.why--compact { width: 44px; height: 44px; }
++@media (min-width: 700px) { .mask { align-items: center; padding: 28px; } .sheet { border-radius: var(--r-lg); } }
++@media (max-width: 420px) {
++  .cardback, .today__card { min-height: 370px; }
++  .cardback { padding: 22px 18px 28px; }
++  .cardback .seed-art { width: 210px; }
++  .cardback__kicker { font-size: 21px; }
++  .today__card { padding: 28px; }
++  .today__text { font-size: 25px; }
++  .sill { padding: 14px 12px 0; }
++  .sill__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
++  .today__stage > .today__greeting .kicker { letter-spacing: .04em; }
++  .today__date { font-size: 11px; }
++}

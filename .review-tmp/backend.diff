@@ -1,0 +1,463 @@
+﻿diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/card/CardStore.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/card/CardStore.java"
+index 5c2eff4..118e903 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/card/CardStore.java"	
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/card/CardStore.java"	
+@@ -4,6 +4,7 @@ import java.sql.ResultSet;
+ import java.sql.SQLException;
+ import java.time.LocalDate;
+ import java.util.HashMap;
++import java.util.Collection;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Map;
+@@ -51,6 +52,15 @@ public class CardStore {
+         return jdbc.sql(SELECT_CARD + " WHERE c.id = :id").param("id", cardId).query(MAPPER).optional();
+     }
+ 
++    /** 批量读取包含已停用卡的历史内容，避免列表中逐条往返数据库。 */
++    public Map<Long, Card> findByIds(Collection<Long> cardIds) {
++        if (cardIds.isEmpty()) return Map.of();
++        Map<Long, Card> result = new HashMap<>();
++        jdbc.sql(SELECT_CARD + " WHERE c.id IN (:ids)").param("ids", cardIds)
++                .query(MAPPER).list().forEach(card -> result.put(card.id(), card));
++        return result;
++    }
++
+     /** 某天发给某人的那张卡（用于「不连续同类 / 尽量交替类型」） */
+     public Optional<Card> cardOfDate(long userId, LocalDate date) {
+         return jdbc.sql(SELECT_CARD + """
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/explored/ExploredService.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/explored/ExploredService.java"
+index a59c425..68c2a85 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/explored/ExploredService.java"	
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/explored/ExploredService.java"	
+@@ -45,10 +45,12 @@ public class ExploredService {
+     public ExploredView explored(long userId) {
+         // 新的在前（AssignmentStore.findAll 的排序），所以下面不用再排一次
+         List<Assignment> history = assignments.findAll(userId);
++        Map<Long, Assignment> unique = dedupeByCard(history);
++        Map<Long, Card> catalog = cards.findByIds(unique.keySet());
+ 
+         List<ExploredCard> items = new ArrayList<>();
+-        for (Assignment a : dedupeByCard(history).values()) {
+-            Card card = cards.findById(a.cardId()).orElse(null);
++        for (Assignment a : unique.values()) {
++            Card card = catalog.get(a.cardId());
+             // 两张闸门：卡没被删掉；且真的是探索卡（放纵卡/习惯卡一张都不许从这条路漏出去）
+             if (card != null && visibleInExplored(card.type())) {
+                 items.add(item(a, card));
+diff --git "a/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/RecoveryTokenStore.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/RecoveryTokenStore.java"
+new file mode 100644
+index 0000000..6566bea
+--- /dev/null
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/RecoveryTokenStore.java"	
+@@ -0,0 +1,39 @@
++package com.dailyseed.user;
++
++import java.security.SecureRandom;
++import java.util.HexFormat;
++import java.util.Optional;
++import org.springframework.jdbc.core.simple.JdbcClient;
++import org.springframework.stereotype.Repository;
++import org.springframework.transaction.annotation.Transactional;
++
++@Repository
++public class RecoveryTokenStore {
++    private final JdbcClient jdbc;
++    private final SecureRandom random = new SecureRandom();
++
++    public RecoveryTokenStore(JdbcClient jdbc) { this.jdbc = jdbc; }
++
++    public Optional<Long> findUserId(String token) {
++        if (token == null || !token.matches("[a-f0-9]{64}")) return Optional.empty();
++        return jdbc.sql("SELECT user_id FROM recovery_tokens WHERE token_hash = :hash AND expires_at > CURRENT_TIMESTAMP(6)")
++                .param("hash", UserStore.sha256(token)).query(Long.class).optional();
++    }
++
++    @Transactional
++    public String issue(long userId) {
++        byte[] bytes = new byte[32];
++        random.nextBytes(bytes);
++        String token = HexFormat.of().formatHex(bytes);
++        jdbc.sql("DELETE FROM recovery_tokens WHERE user_id = :u AND expires_at <= CURRENT_TIMESTAMP(6)")
++                .param("u", userId).update();
++        jdbc.sql("INSERT INTO recovery_tokens (token_hash, user_id, expires_at) VALUES (:hash, :u, DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 400 DAY))")
++                .param("hash", UserStore.sha256(token)).param("u", userId).update();
++        return token;
++    }
++
++    public void renew(String token) {
++        jdbc.sql("UPDATE recovery_tokens SET expires_at = DATE_ADD(CURRENT_TIMESTAMP(6), INTERVAL 400 DAY) WHERE token_hash = :hash AND expires_at > CURRENT_TIMESTAMP(6)")
++                .param("hash", UserStore.sha256(token)).update();
++    }
++}
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/SessionController.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/SessionController.java"
+index 4ed92fa..008d3b1 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/SessionController.java"	
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/SessionController.java"	
+@@ -119,7 +119,7 @@ public class SessionController {
+         if (claimed.isPresent()) {
+             Optional<Long> known = users.findUserIdByDevice(claimed.get());
+             if (known.isPresent()) {
+-                return remembered(new Response(known.get(), null, false, null, false), known.get());
++                return remembered(new Response(known.get(), null, false, null, false), known.get(), httpRequest);
+             }
+         }
+ 
+@@ -133,7 +133,7 @@ public class SessionController {
+                 String issued = newDeviceId();
+                 users.attachDevice(userId, issued);
+                 counters.identityRecoveredByCookie(); // 退路真的救到人了，这条最值得看
+-                return remembered(new Response(userId, null, false, issued, true), userId);
++                return remembered(new Response(userId, null, false, issued, true), userId, httpRequest);
+             }
+         }
+ 
+@@ -143,7 +143,7 @@ public class SessionController {
+         UserStore.Session session = users.createAnonymous(fresh);
+         counters.sessionCreated();
+         return remembered(new Response(session.userId(), session.syncCode(), true, null, false),
+-                session.userId());
++                session.userId(), httpRequest);
+     }
+ 
+     /**
+@@ -160,7 +160,7 @@ public class SessionController {
+      * （不带 {@code X-Device-Id} 就是 400，见交接简报 §5），用它表示"码错了"会被误读成身份问题。
+      */
+     @PostMapping("/restore")
+-    public ResponseEntity<RestoreResponse> restore(@RequestBody @Valid RestoreRequest request) {
++    public ResponseEntity<RestoreResponse> restore(@RequestBody @Valid RestoreRequest request, HttpServletRequest httpRequest) {
+         if (RestoreService.bareSyncCode(request.syncCode()).length() != RestoreService.SYNC_CODE_LENGTH) {
+             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "同步码是 8 位，像 K7M2-P9QX 这样");
+         }
+@@ -170,7 +170,7 @@ public class SessionController {
+                             HttpStatus.NOT_FOUND, "没有这个同步码，再对一遍？"));
+             // ★ 恢复之后这条 Cookie 必须跟着换人，否则下次清缓存会被领回**上一个**账号
+             counters.sessionRecovered();
+-            return remembered(new RestoreResponse(restored.syncCode()), restored.userId());
++            return remembered(new RestoreResponse(restored.syncCode()), restored.userId(), httpRequest);
+         } catch (IllegalStateException e) {
+             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+         }
+@@ -190,15 +190,9 @@ public class SessionController {
+         return new ReminderResponse(time.format(ReminderService.HHMM));
+     }
+ 
+-    private ResponseEntity<Response> remembered(Response body, long userId) {
++    private <T> ResponseEntity<T> remembered(T body, long userId, HttpServletRequest request) {
+         HttpHeaders headers = new HttpHeaders();
+-        cookie.remember(headers, userId);
+-        return new ResponseEntity<>(body, headers, HttpStatus.OK);
+-    }
+-
+-    private ResponseEntity<RestoreResponse> remembered(RestoreResponse body, long userId) {
+-        HttpHeaders headers = new HttpHeaders();
+-        cookie.remember(headers, userId);
++        cookie.remember(headers, userId, request);
+         return new ResponseEntity<>(body, headers, HttpStatus.OK);
+     }
+ 
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/SessionCookie.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/SessionCookie.java"
+index 8ea6b9c..cdb24d9 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/SessionCookie.java"	
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/SessionCookie.java"	
+@@ -11,23 +11,9 @@ import org.springframework.http.ResponseCookie;
+ import org.springframework.stereotype.Component;
+ 
+ /**
+- * 身份的第二条命：把 userId 种进一个 **HttpOnly Cookie**。
+- *
+- * <p>为什么要有它（§6.4 那个"物理上无法送达"的死角）：身份只认 {@code X-Device-Id}，
+- * 而它存在 localStorage 里。用户一清浏览器缓存，localStorage **和**同步码一起消失——
+- * 后端认不出他是谁，任何"服务端保管、以后补发"的方案都送不到。
+- * Cookie 是另一套存储：清"网站数据"会一起清掉，但**只清 localStorage / 换个浏览器 profile**
+- * 这类最常见的丢法，它还在。这不是万无一失，是把概率从"很容易丢"降到"要丢一起丢"。
+- *
+- * <p>三条刻意的取舍：
+- * <ol>
+- *   <li><b>HttpOnly</b>：脚本读不到它，XSS 偷不走。代价是前端**看不见**自己的 userId，
+- *       所以"是不是靠 Cookie 认出我"只能由后端在响应里表达，不能由前端判断</li>
+- *   <li><b>不放任何秘密</b>：里面只有一个自增数字，不是同步码、不是哈希。
+- *       拿着它**不能**像同步码那样在别处恢复——同步码仍然是唯一的凭据</li>
+- *   <li><b>可关</b>：{@code dailyseed.session.cookie.enabled=false} 就完全退回只管 localStorage。
+- *       它是一条持久标识符，介意隐私的部署有权不要它</li>
+- * </ol>
++ * HttpOnly Cookie 保存 256 位随机恢复令牌；数据库只保存哈希与到期时间。
++ * 不接受旧版数字 userId Cookie。有效本地设备登录后会自动签发新令牌。
++ * Cookie 是身份凭据，HttpOnly / SameSite 只是附加保护，不能替代服务端校验。
+  */
+ @Component
+ public class SessionCookie {
+@@ -41,33 +27,50 @@ public class SessionCookie {
+      */
+     private static final Duration MAX_AGE = Duration.ofDays(400);
+ 
++    private final RecoveryTokenStore tokens;
+     private final boolean enabled;
+     private final boolean secure;
+ 
+-    public SessionCookie(@Value("${dailyseed.session.cookie.enabled:true}") boolean enabled,
++    public SessionCookie(RecoveryTokenStore tokens,
++                         @Value("${dailyseed.session.cookie.enabled:true}") boolean enabled,
+                          @Value("${dailyseed.session.cookie.secure:false}") boolean secure) {
++        this.tokens = tokens;
+         this.enabled = enabled;
+         this.secure = secure;
+     }
+ 
+-    /** 读回 userId。没开、没有、或者值不是数字，都当作"没有"。 */
++    /** 校验令牌后读回 userId；缺失、伪造、过期都当作没有凭据。 */
+     public Optional<Long> readUserId(HttpServletRequest request) {
+         if (!enabled || request.getCookies() == null) {
+             return Optional.empty();
+         }
++        return readToken(request).flatMap(tokens::findUserId);
++    }
++
++    private Optional<String> readToken(HttpServletRequest request) {
++        if (request == null || request.getCookies() == null) return Optional.empty();
+         return Arrays.stream(request.getCookies())
+                 .filter(c -> NAME.equals(c.getName()))
+                 .map(Cookie::getValue)
+                 .findFirst()
+-                .flatMap(SessionCookie::parseUserId);
++                .filter(value -> value.matches("[a-f0-9]{64}"));
+     }
+ 
+     /** 「记住这个人」。写进响应头，由浏览器保管。 */
+-    public void remember(HttpHeaders headers, long userId) {
++    public void remember(HttpHeaders headers, long userId, HttpServletRequest request) {
+         if (!enabled) {
+             return;
+         }
+-        headers.add(HttpHeaders.SET_COOKIE, cookie(String.valueOf(userId), MAX_AGE).toString());
++        Optional<String> current = readToken(request)
++                .filter(token -> tokens.findUserId(token).filter(id -> id == userId).isPresent());
++        String token;
++        if (current.isPresent()) {
++            token = current.get();
++            tokens.renew(token);
++        } else {
++            token = tokens.issue(userId);
++        }
++        headers.add(HttpHeaders.SET_COOKIE, cookie(token, MAX_AGE).toString());
+     }
+ 
+     /** 这个数值是坏的（比如手改过）：清掉它，免得每次请求都白读一遍并走进自愈 */
+@@ -90,12 +93,4 @@ public class SessionCookie {
+                 .build();
+     }
+ 
+-    static Optional<Long> parseUserId(String raw) {
+-        try {
+-            long userId = Long.parseLong(raw.trim());
+-            return userId > 0 ? Optional.of(userId) : Optional.empty();
+-        } catch (NumberFormatException e) {
+-            return Optional.empty();
+-        }
+-    }
+ }
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/UserStore.java" "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/UserStore.java"
+index 573ec05..21d6ac5 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/main/java/com/dailyseed/user/UserStore.java"	
++++ "b/D:\\deepseek harness\\backend\\src/main/java/com/dailyseed/user/UserStore.java"	
+@@ -49,6 +49,7 @@ public class UserStore {
+         this.jdbc = jdbc;
+     }
+ 
++    @Transactional
+     public Session createAnonymous(String deviceId) {
+         long userId = insertUser();
+         jdbc.sql("INSERT INTO user_devices (user_id, device_id) VALUES (:u, :d)")
+diff --git "a/D:\\deepseek harness\\backend\\src/main/resources/db/migration/V5__recovery_tokens.sql" "b/D:\\deepseek harness\\backend\\src/main/resources/db/migration/V5__recovery_tokens.sql"
+new file mode 100644
+index 0000000..21ace47
+--- /dev/null
++++ "b/D:\\deepseek harness\\backend\\src/main/resources/db/migration/V5__recovery_tokens.sql"	
+@@ -0,0 +1,11 @@
++-- Cookie 是身份凭据，不能直接信任可枚举的用户编号。
++-- 原始随机令牌只放在浏览器，数据库仅存 SHA-256 哈希。
++CREATE TABLE recovery_tokens (
++    token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
++    user_id BIGINT NOT NULL,
++    expires_at DATETIME(6) NOT NULL,
++    PRIMARY KEY (token_hash),
++    KEY idx_recovery_user (user_id),
++    KEY idx_recovery_expiry (expires_at),
++    CONSTRAINT fk_recovery_user FOREIGN KEY (user_id) REFERENCES users(id)
++) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/test/java/com/dailyseed/explored/ExploredServiceTest.java" "b/D:\\deepseek harness\\backend\\src/test/java/com/dailyseed/explored/ExploredServiceTest.java"
+index 9dc68c1..26d8ded 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/test/java/com/dailyseed/explored/ExploredServiceTest.java"	
++++ "b/D:\\deepseek harness\\backend\\src/test/java/com/dailyseed/explored/ExploredServiceTest.java"	
+@@ -3,7 +3,14 @@ package com.dailyseed.explored;
+ import static org.assertj.core.api.Assertions.assertThat;
+ 
+ import com.dailyseed.assignment.Assignment;
++import com.dailyseed.assignment.AssignmentStore;
+ import com.dailyseed.card.Card;
++import com.dailyseed.card.CardStore;
++import com.dailyseed.card.ScienceNotes;
++import com.fasterxml.jackson.databind.ObjectMapper;
++import java.util.Collection;
++import java.util.Optional;
++import java.util.concurrent.atomic.AtomicInteger;
+ import java.time.LocalDate;
+ import java.util.List;
+ import java.util.Map;
+@@ -58,4 +65,41 @@ class ExploredServiceTest {
+     void emptyHistoryIsFine() {
+         assertThat(ExploredService.dedupeByCard(List.of())).isEmpty();
+     }
++
++    @Test
++    void batchesCardsAndPreservesLatestExplorations() {
++        var history = new AssignmentStore(null) {
++            @Override public List<Assignment> findAll(long userId) {
++                return List.of(a(11, "2026-10-11", "KEPT"), a(12, "2026-10-10", "PENDING"),
++                        a(33, "2026-10-09", "PENDING"), a(99, "2026-10-08", "PENDING"),
++                        a(11, "2026-10-01", "PENDING"));
++            }
++        };
++        var batches = new AtomicInteger();
++        var catalog = new CardStore(null) {
++            @Override public Map<Long, Card> findByIds(Collection<Long> ids) {
++                batches.incrementAndGet();
++                assertThat(ids).containsExactly(11L, 12L, 33L, 99L);
++                return Map.of(11L, card(11, Card.EXPLORE), 12L, card(12, Card.HABIT),
++                        33L, card(33, Card.EXPLORE));
++            }
++            @Override public Optional<Card> findById(long cardId) {
++                throw new AssertionError("列表不应再逐张查询");
++            }
++        };
++        var result = new ExploredService(history, catalog, new ScienceNotes(new ObjectMapper())).explored(1);
++        assertThat(batches.get()).isEqualTo(1);
++        assertThat(result.items()).extracting(ExploredCard::cardId).containsExactly(11L, 33L);
++        assertThat(result.items().getFirst().kept()).isTrue();
++        assertThat(result.from()).isEqualTo("2026-10-09");
++        assertThat(result.to()).isEqualTo("2026-10-11");
++    }
++
++    @Test void emptyBatchDoesNotRequireADatabase() {
++        assertThat(new CardStore(null).findByIds(List.of())).isEmpty();
++    }
++
++    private static Card card(long id, String type) {
++        return new Card(id, type, "观察", "一件小事", 1, false, false, null, null, null, null, null);
++    }
+ }
+diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/test/java/com/dailyseed/user/SessionCookieTest.java" "b/D:\\deepseek harness\\backend\\src/test/java/com/dailyseed/user/SessionCookieTest.java"
+index 5facba9..9ebbba9 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\backend-src/test/java/com/dailyseed/user/SessionCookieTest.java"	
++++ "b/D:\\deepseek harness\\backend\\src/test/java/com/dailyseed/user/SessionCookieTest.java"	
+@@ -1,46 +1,75 @@
+ package com.dailyseed.user;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+-
++import java.util.HashMap;
++import java.util.Map;
+ import java.util.Optional;
+-import org.junit.jupiter.api.DisplayName;
++import jakarta.servlet.http.Cookie;
+ import org.junit.jupiter.api.Test;
++import org.springframework.http.HttpHeaders;
++import org.springframework.mock.web.MockHttpServletRequest;
+ 
+-/**
+- * Cookie 里那个 userId 的解析（纯函数，不连数据库）。
+- *
+- * <p>包一层解析而不是直接 {@code Long.parseLong}，是因为这个值**用户能改**：
+- * 手写一个非数字进去不该让整个接口 500，而应该被当成"没有凭据"、走正常建号流程。
+- */
+ class SessionCookieTest {
+-
+-    @Test
+-    @DisplayName("正常值能读出来")
+-    void readsPositiveIds() {
+-        assertThat(SessionCookie.parseUserId("42")).contains(42L);
+-        assertThat(SessionCookie.parseUserId(" 42 ")).contains(42L);
++    static class Tokens extends RecoveryTokenStore {
++        final Map<String, Long> known = new HashMap<>();
++        int issued;
++        int renewed;
++        Tokens() { super(null); }
++        @Override public Optional<Long> findUserId(String token) { return Optional.ofNullable(known.get(token)); }
++        @Override public String issue(long userId) {
++            String token = String.format("%064x", ++issued);
++            known.put(token, userId);
++            return token;
++        }
++        @Override public void renew(String token) { renewed++; }
+     }
+-
+-    @Test
+-    @DisplayName("0 / 负数 / 非数字 / 空白 → 都当作没有凭据（不能让手改的值把接口打崩）")
+-    void rejectsGarbage() {
+-        assertThat(SessionCookie.parseUserId("0")).isEmpty();
+-        assertThat(SessionCookie.parseUserId("-1")).isEmpty();
+-        assertThat(SessionCookie.parseUserId("abc")).isEmpty();
+-        assertThat(SessionCookie.parseUserId("1e3")).isEmpty();
+-        assertThat(SessionCookie.parseUserId("")).isEmpty();
+-        assertThat(SessionCookie.parseUserId("  ")).isEmpty();
++    private MockHttpServletRequest request(String value) {
++        var request = new MockHttpServletRequest();
++        request.setCookies(new Cookie(SessionCookie.NAME, value));
++        return request;
+     }
+-
+-    @Test
+-    @DisplayName("Cookie 名带 dailyseed 前缀：同一台机器上跑多个项目时不打架")
+-    void cookieNameIsNamespaced() {
+-        assertThat(SessionCookie.NAME).startsWith("dailyseed");
++    @Test void rejectsNumericAndForgedCookies() {
++        var tokens = new Tokens();
++        var cookie = new SessionCookie(tokens, true, false);
++        assertThat(cookie.readUserId(request("42"))).isEmpty();
++        assertThat(cookie.readUserId(request("a".repeat(64)))).isEmpty();
++        assertThat(cookie.readUserId(request("garbage"))).isEmpty();
++        assertThat(cookie.readUserId(new MockHttpServletRequest())).isEmpty();
+     }
+-
+-    @Test
+-    @DisplayName("Optional.empty 而不是抛异常——调用方只关心「有没有」")
+-    void neverThrows() {
+-        assertThat(SessionCookie.parseUserId("9999999999999999999999")).isInstanceOf(Optional.class);
++    @Test void resolvesOnlyStoredTokenAndRejectsRevokedToken() {
++        var tokens = new Tokens();
++        var cookie = new SessionCookie(tokens, true, false);
++        String token = tokens.issue(42);
++        assertThat(cookie.readUserId(request(token))).contains(42L);
++        tokens.known.clear();
++        assertThat(cookie.readUserId(request(token))).isEmpty();
++    }
++    @Test void remembersWithCookieProtectionsAndReusesExistingToken() {
++        var tokens = new Tokens();
++        var cookie = new SessionCookie(tokens, true, true);
++        String token = tokens.issue(42);
++        var headers = new HttpHeaders();
++        cookie.remember(headers, 42, request(token));
++        assertThat(tokens.issued).isEqualTo(1);
++        assertThat(tokens.renewed).isEqualTo(1);
++        assertThat(headers.getFirst(HttpHeaders.SET_COOKIE)).contains(token, "HttpOnly", "Secure", "SameSite=Lax", "Path=/");
++    }
++    @Test void changingAccountIssuesDifferentCredential() {
++        var tokens = new Tokens();
++        var cookie = new SessionCookie(tokens, true, false);
++        String old = tokens.issue(42);
++        var headers = new HttpHeaders();
++        cookie.remember(headers, 99, request(old));
++        assertThat(tokens.issued).isEqualTo(2);
++        assertThat(headers.getFirst(HttpHeaders.SET_COOKIE)).doesNotContain(old);
++    }
++    @Test void disabledCookieNeitherReadsNorWrites() {
++        var tokens = new Tokens();
++        var cookie = new SessionCookie(tokens, false, false);
++        var headers = new HttpHeaders();
++        cookie.remember(headers, 42, new MockHttpServletRequest());
++        assertThat(headers).isEmpty();
++        assertThat(tokens.issued).isZero();
++        assertThat(cookie.readUserId(request(tokens.issue(42)))).isEmpty();
+     }
+ }

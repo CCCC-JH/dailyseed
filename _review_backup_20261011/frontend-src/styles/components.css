@@ -1,0 +1,975 @@
+/* ============================================================
+   遮罩 + 底部弹层（依据 / 毕业确认 / 同步码 共用一套）
+   ============================================================ */
+
+.mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(4, 5, 7, 0.62);
+  backdrop-filter: blur(7px) saturate(120%);
+  -webkit-backdrop-filter: blur(7px) saturate(120%);
+  animation: fade-in var(--t-base) var(--ease);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 620px;
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px var(--pad) calc(env(safe-area-inset-bottom) + 28px);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: linear-gradient(180deg, #14181b 0%, #0d1013 100%);
+  box-shadow: inset 0 1px 0 var(--edge-strong), 0 -24px 60px -20px rgba(0, 0, 0, 0.85);
+  animation: sheet-in var(--t-slow) var(--ease);
+}
+
+.sheet__grip {
+  width: 38px;
+  height: 4px;
+  margin: 4px auto 16px;
+  border-radius: var(--r-pill);
+  background: var(--edge-strong);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.sheet__title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 630;
+  line-height: 1.4;
+}
+
+.sheet__sub {
+  margin: 5px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.sheet__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  transition: background var(--t-fast) var(--ease), transform var(--t-fast) var(--ease);
+}
+
+.sheet__close:hover {
+  background: var(--surface-3);
+}
+
+.sheet__close:active {
+  transform: scale(0.9);
+}
+
+.sheet__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.sheet__actions--row {
+  flex-direction: row;
+}
+
+.sheet__actions--row .btn {
+  flex: 1;
+}
+
+/* ============================================================
+   依据「?」：① 好处 ② 依据 ③ 出处 ④ 科普
+   ============================================================ */
+
+.evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.evidence__block {
+  padding: 15px 16px;
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.evidence__label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--seed);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+}
+
+.evidence__text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.72;
+  color: var(--ink);
+}
+
+.evidence__text--cite {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.68;
+}
+
+.evidence__note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--edge-strong);
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.evidence__science {
+  padding: 16px;
+  border-radius: var(--r-sm);
+  background: rgba(95, 216, 164, 0.055);
+  box-shadow: inset 0 0 0 1px rgba(95, 216, 164, 0.16);
+}
+
+.evidence__science h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 620;
+  color: var(--seed);
+}
+
+/* 触发「?」的低调入口：不是一个显眼的按钮 */
+.why {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 7px 13px 7px 11px;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink-2);
+  font-size: 13px;
+  transition: background var(--t-base) var(--ease), color var(--t-base) var(--ease),
+    box-shadow var(--t-base) var(--ease);
+}
+
+.why:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--edge-strong);
+}
+
+.why__glyph {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ============================================================
+   花园：窗台 · 一排小盆
+   ============================================================ */
+
+.sill {
+  padding: 20px 16px 0;
+  border-radius: var(--r-md);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 70%);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.sill__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px 4px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.sill__empty {
+  padding: 30px 10px 40px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+.pot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 2px 4px;
+  border-radius: var(--r-sm);
+  transition: background var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+}
+
+.pot:hover {
+  background: var(--surface-1);
+}
+
+.pot:active {
+  transform: scale(0.94);
+}
+
+.pot__stage {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 54px;
+  width: 100%;
+}
+
+.pot__saucer {
+  position: absolute;
+  bottom: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.pot__bowl {
+  position: relative;
+  border-radius: 8px 8px 13px 13px / 6px 6px 17px 17px;
+  background: linear-gradient(168deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.055));
+  box-shadow: inset 0 -5px 9px -5px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.pot__leaf {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform-origin: 50% 100%;
+  border-radius: 52% 48% 46% 54% / 72% 70% 30% 28%;
+  background: linear-gradient(160deg, var(--seed), var(--seed-deep));
+  box-shadow: 0 0 13px -3px var(--seed-glow);
+}
+
+/* 植株大小 = 留住次数。四档，差距要看得出来，但不能夸张 */
+.pot--1 .pot__bowl {
+  width: 22px;
+  height: 15px;
+}
+.pot--1 .pot__leaf {
+  width: 9px;
+  height: 11px;
+  margin-left: -4.5px;
+}
+.pot--1 .pot__saucer {
+  width: 27px;
+  height: 5px;
+}
+
+.pot--2 .pot__bowl {
+  width: 28px;
+  height: 19px;
+}
+.pot--2 .pot__leaf {
+  width: 13px;
+  height: 17px;
+  margin-left: -6.5px;
+}
+.pot--2 .pot__leaf--2 {
+  display: block;
+  margin-left: -13px;
+  transform: rotate(-24deg);
+  opacity: 0.82;
+}
+.pot--2 .pot__saucer {
+  width: 34px;
+  height: 6px;
+}
+
+.pot--3 .pot__bowl {
+  width: 34px;
+  height: 23px;
+}
+.pot--3 .pot__leaf {
+  width: 16px;
+  height: 24px;
+  margin-left: -8px;
+}
+.pot--3 .pot__leaf--2 {
+  display: block;
+  margin-left: -17px;
+  transform: rotate(-27deg);
+  opacity: 0.84;
+}
+.pot--3 .pot__leaf--3 {
+  display: block;
+  margin-left: 0;
+  transform: rotate(26deg);
+  opacity: 0.72;
+}
+.pot--3 .pot__saucer {
+  width: 41px;
+  height: 7px;
+}
+
+.pot--4 .pot__bowl {
+  width: 42px;
+  height: 28px;
+}
+.pot--4 .pot__leaf {
+  width: 19px;
+  height: 33px;
+  margin-left: -9.5px;
+}
+.pot--4 .pot__leaf--2 {
+  display: block;
+  margin-left: -22px;
+  transform: rotate(-30deg);
+  opacity: 0.86;
+}
+.pot--4 .pot__leaf--3 {
+  display: block;
+  margin-left: 1px;
+  transform: rotate(29deg);
+  opacity: 0.74;
+}
+.pot--4 .pot__saucer {
+  width: 50px;
+  height: 8px;
+}
+
+/* 默认只画一片叶，第二三片由 --2/--3 打开 */
+.pot__leaf--2,
+.pot__leaf--3 {
+  display: none;
+}
+
+.pot__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.pot__count {
+  font-size: 12.5px;
+  font-weight: 620;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「这个选项现在有意义了」的小标记 —— 不是「你该毕业了」（§6.1） */
+.pot__ready {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--harvest-glow);
+  box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.3);
+  color: var(--harvest);
+  font-size: 9px;
+}
+
+.pot--tapped .pot__leaf {
+  animation: pop var(--t-slow) var(--ease-out-back);
+}
+
+/* 已内化：安静、暖色、不抢眼 */
+.graduated {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.graduated__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  border-radius: var(--r-sm);
+  background: linear-gradient(100deg, var(--harvest-glow), transparent 68%);
+  box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.17);
+  text-align: left;
+  transition: box-shadow var(--t-base) var(--ease), transform var(--t-fast) var(--ease);
+}
+
+.graduated__row:hover {
+  box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.3);
+}
+
+.graduated__row:active {
+  transform: scale(0.99);
+}
+
+.graduated__seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(233, 196, 106, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.28);
+  color: var(--harvest);
+  font-size: 13px;
+}
+
+.graduated__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graduated__date {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   同步码
+   ============================================================ */
+
+.synccode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 20px 16px;
+  border-radius: var(--r-md);
+  background: linear-gradient(150deg, rgba(95, 216, 164, 0.1), rgba(95, 216, 164, 0.02));
+  box-shadow: inset 0 0 0 1px rgba(95, 216, 164, 0.2);
+}
+
+.synccode__value {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 25px;
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  color: var(--ink);
+}
+
+.synccode--missing .synccode__value {
+  font-family: inherit;
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+
+/* ============================================================
+   毕业分享图预览
+   ============================================================ */
+
+.share__preview {
+  display: block;
+  width: 100%;
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px var(--edge), 0 22px 50px -24px rgba(0, 0, 0, 0.9);
+}
+
+.share__hint {
+  margin: 12px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* ============================================================
+   设置页行
+   ============================================================ */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 15px 17px;
+  text-align: left;
+  border-bottom: 1px solid var(--edge);
+  transition: background var(--t-fast) var(--ease);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row--tap:hover {
+  background: var(--surface-2);
+}
+
+.row__label {
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.row__value {
+  color: var(--ink-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   今天页
+   ============================================================ */
+
+.today__stage {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---- 抽：卡背 → 翻面揭晓 ----
+   刻意只用一条缓动、一个位移，不叠光效也不撒粒子：
+   克制的高质感靠层次与材质，满屏动效既撞"极简"也撞红线 1。 */
+
+.flip {
+  position: relative;
+  perspective: 1500px;
+}
+
+.flip__inner {
+  position: relative;
+  transform-style: preserve-3d;
+  /* 640ms 比 --t-slow 略长：翻面是"揭晓"这个动作，值得多给一点时间 */
+  transition: transform 640ms var(--ease);
+}
+
+.flip__inner.is-revealed {
+  transform: rotateY(180deg);
+}
+
+.flip__face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flip__back {
+  position: absolute;
+  inset: 0;
+}
+
+.flip__front {
+  transform: rotateY(180deg);
+}
+
+.cardback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 100%;
+  /* 与 .today__card 同一个最小高度：翻面时卡片不会长高，末段就不会跳一下 */
+  min-height: 226px;
+  padding: 34px 24px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 100% at 50% 0%, rgba(95, 216, 164, 0.1), transparent 62%),
+    linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 28px 60px -34px rgba(0, 0, 0, 0.95);
+  overflow: hidden;
+}
+
+/* 和 .today__card::before 同一道强调线：卡背与正面是同一张卡的两面 */
+.cardback::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--seed), transparent);
+  opacity: 0.5;
+}
+
+/* 一颗种子：细细的呼吸，暗示"还没长出来" */
+.cardback__seed {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, var(--seed), var(--seed-deep));
+  box-shadow: 0 0 42px -6px var(--seed-glow);
+  animation: breathe 2.6s var(--ease) infinite;
+}
+
+.cardback__kicker {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cardback__hint {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+/* 「抽」按钮：压在卡背正中偏下，是卡背唯一的动作 */
+.flip__tap {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 24px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--seed) 0%, var(--seed-deep) 100%);
+  color: var(--seed-ink);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.32), 0 14px 34px -16px var(--seed-glow);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease),
+    opacity var(--t-base) var(--ease);
+}
+
+.flip__tap:hover:not(:disabled) {
+  transform: translateX(-50%) translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(95, 216, 164, 0.44), 0 18px 40px -14px var(--seed-glow);
+}
+
+.flip__tap:active:not(:disabled) {
+  transform: translateX(-50%) translateY(1px) scale(0.985);
+}
+
+.flip__tap:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.flip__tap-glyph {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 重抽：刻意比「留住它」轻一档 —— 换一张是次要动作，不该抢主按钮 */
+.today__redraw {
+  color: var(--ink-2);
+}
+
+/* 抽出来的新卡：快而干净的入场（不重复整套翻面，翻多了会腻） */
+@keyframes card-swap-in {
+  from {
+    opacity: 0;
+    transform: scale(0.965) translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.today__card--swap {
+  animation: card-swap-in 520ms var(--ease-out-back) both;
+}
+
+.today__card {
+  position: relative;
+  /* 与 .cardback 对齐：两面同高，翻面时卡片不会长高 */
+  min-height: 226px;
+  padding: 26px 22px 24px;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(95, 216, 164, 0.075), transparent 58%),
+    linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  box-shadow: inset 0 0 0 1px var(--edge-strong), 0 28px 60px -34px rgba(0, 0, 0, 0.95);
+  overflow: hidden;
+}
+
+/* 顶部一道极细的强调线，是"被选中"的暗示，不写文案 */
+.today__card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--seed), transparent);
+  opacity: 0.5;
+}
+
+.today__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.today__text {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.46;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.today__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  margin-top: 22px;
+}
+
+.today__kept {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--seed);
+  font-size: 13.5px;
+  animation: rise var(--t-base) var(--ease);
+}
+
+.today__kept-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(95, 216, 164, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(95, 216, 164, 0.28);
+}
+
+.today__next {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.today__next-label {
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.today__next-text {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today__indulge {
+  margin-top: 2px;
+  align-self: center;
+  color: var(--ink-3);
+  font-size: 13px;
+  padding: 9px 14px;
+  border-radius: var(--r-pill);
+  transition: color var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+
+.today__indulge:hover {
+  color: var(--ink-2);
+  background: var(--surface-1);
+}
+
+/* 首页那句问候：不要排比、不要感叹号，就一行 */
+.today__greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.today__date {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   「走过的」：一条安静的路
+   ------------------------------------------------------------
+   探索卡是"一次性"的，所以这一页不用花园那套"盆"的网格，
+   而是一条带时间点的直线——像一列路标，不是一张成绩单。
+   左边那条竖线由 .trail-list::before 画一次，不是每行各画一段。
+   ============================================================ */
+
+.trail-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 22px;
+}
+
+/* 那条路本身：淡到几乎看不见，只在有内容时出现 */
+.trail-list::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 5px;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--edge-strong) 12%,
+    var(--edge-strong) 88%,
+    transparent
+  );
+}
+
+.trail {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 0;
+}
+
+/* 路上的那个点。留住了的那条会亮起来——不是奖励，只是"这条我停下来了" */
+.trail__dot {
+  position: absolute;
+  left: -22px;
+  top: 20px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1.5px var(--edge-strong);
+}
+
+.trail__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.trail__text {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.trail__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trail__sep {
+  color: var(--ink-3);
+  opacity: 0.5;
+}
+
+.trail__kept {
+  color: var(--seed);
+}
+
+/* 「?」在列表里要收得比弹层里更小，否则每条都在喊 */
+.why--compact {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+/* ============================================================
+   提醒：预设钟点 + 时间输入
+   ============================================================ */
+
+.remind__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 9px 15px;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+
+.chip:hover {
+  background: var(--surface-2);
+}
+
+.chip--on {
+  background: rgba(95, 216, 164, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(95, 216, 164, 0.4);
+  color: var(--seed);
+}
+
+.remind__time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 13px 17px;
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+
+.remind__time input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  outline: none;
+}
+
+.remind__time input::placeholder {
+  color: var(--ink-3);
+  letter-spacing: 0.09em;
+}
+
+/* 时间控件是系统画的，给个统一的着色，别让它跳出色板 */
+.remind__time input[type='time']::-webkit-calendar-picker-indicator {
+  filter: invert(0.75);
+  cursor: pointer;
+}

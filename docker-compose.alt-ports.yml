@@ -1,0 +1,27 @@
+# 端口覆盖：**只在本机已经有一套开发环境时用**。
+#
+# 为什么需要它：本机 MySQL 占着 3306、本机后端占着 8080，直接 `docker compose up` 会因为
+# "port is already allocated" 起不来。这个文件把**宿主机**端口挪开，镜像 / Dockerfile /
+# healthcheck / depends_on / nginx 全部照原样跑——验的还是同一套东西，只是不进同一个门。
+#
+# 用法（★ 一定要带 `--env-file backend/.env`，原因见 docker-compose.yml 文件头）：
+#   docker compose --env-file backend/.env \
+#     -f docker-compose.yml -f docker-compose.alt-ports.yml up -d --build
+#   curl http://127.0.0.1:18080/api/health      # 后端直连
+#   curl http://127.0.0.1:18088/api/health      # 经 nginx（浏览器的真实路径）
+#
+# ⚠️ 库的宿主机端口用 13307 而不是常见的 13306：这台机器上 13306 已经被**另一个项目的
+#    容器**占着（实测 `port is already allocated`）。换一个不撞的号比停别人的容器省事。
+#
+# ⚠️ compose 对 `ports` 这类多值字段是**拼接**的（不是替换），所以这里必须用 `!override`；
+#    写成普通的 `ports:` 会把原来的 3306/8080/8088 一起留着，照样撞端口。
+services:
+  mysql:
+    ports: !override
+      - "127.0.0.1:13307:3306"
+  api:
+    ports: !override
+      - "127.0.0.1:18080:8080"
+  web:
+    ports: !override
+      - "127.0.0.1:18088:80"

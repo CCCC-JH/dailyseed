@@ -1,0 +1,83 @@
+# DailySeed 一键起（开发 / 自托管都用这一份）
+#
+#   ★ 一定要带 --env-file backend/.env（理由见下面那条 ⚠️）
+#   docker compose --env-file backend/.env up -d --build
+#   docker compose --env-file backend/.env ps
+#   curl http://localhost:8080/api/health     # 后端直连：200 才算真的能用
+#   curl http://localhost:8088/api/health     # 经 nginx 的那条路（浏览器的真实路径）
+#
+# 只跑数据库（前后端在本机用 mvn / npm 跑，改代码热更新更快）：
+#   docker compose --env-file backend/.env up -d mysql
+#
+# 本机已经有一套开发环境（3306 / 8080 被本机 MySQL 和后端占着）时，用端口覆盖那份：
+#   docker compose --env-file backend/.env -f docker-compose.yml -f docker-compose.alt-ports.yml up -d --build
+#
+# ⚠️ **为什么必须带 --env-file**：这个文件里有两套完全不同的"读配置"机制——
+#    ① `env_file:` 把 backend/.env 的键**原样交给容器**，不做任何变量替换；
+#    ② `${DB_PASSWORD}` 这种变量替换**只从 shell 或 --env-file / 根 .env 取**，
+#       它**不会**去读 `env_file:` 那一份。
+#    少了 --env-file，mysql 容器拿到默认值 123456，而 api 容器拿的是 .env 里真实的密码：
+#    症状是"库起来了、api 起不来"，日志里刷 access denied。
+#    本地恰好两边都是 123456，所以这个坑**只在换了密码之后才咬人**（2026-10-10 实测确认）。
+#
+# ⚠️ 端口刻意**只绑在 127.0.0.1**：数据库绝不能被公网碰到。
+#    要给外面访问就自己配反向代理（TLS 也加在那一层）。
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-123456}
+      MYSQL_DATABASE: dailyseed
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # ★ 让后端等到数据库**真的能连**再起，而不是"容器启动了"就起。
+      # Spring Boot 起来连不上库会直接退出，然后 restart 循环，日志里刷一堆误导性的栈。
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DB_PASSWORD:-123456}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    # ⚠️ 一边是 compose 自己的变量替换（${DB_PASSWORD}，只从 shell 或根 .env 读），
+    #    一边是 env_file（把文件里的键**原样**交给容器，不做替换）。两者完全不是一回事。
+    #    这里用 env_file 是为了让 backend/.env 成为唯一一份配置来源：
+    #    本机 mvn 跑和容器跑读的是同一个文件。
+    env_file:
+      - ./backend/.env
+    environment:
+      # 容器里的库不叫 localhost，叫 mysql（服务名）
+      DB_URL: jdbc:mysql://mysql:3306/dailyseed?characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      # 同域反代：前端请求相对路径 /api/...，nginx 转给后端，所以后端不需要 CORS
+      BACKEND_UPSTREAM: http://api:8080
+    ports:
+      # 对外只用这一个口
+      - "8088:80"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  mysql-data:

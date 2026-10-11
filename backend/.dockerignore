@@ -1,0 +1,8 @@
+# 构建上下文里不要带这些（镜像小一半，也不会把本机的库密码打进层里）
+.m2repo/
+target/
+.env
+.env.*
+!.env.example
+*.log
+.idea/

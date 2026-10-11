@@ -1,0 +1,2 @@
+# Docker 起的 MySQL 数据卷不要进版本库
+mysql-data/

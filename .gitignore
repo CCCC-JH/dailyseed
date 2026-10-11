@@ -1,0 +1,14 @@
+# ============ 凭据：只在本地存在，绝不提交 ============
+.env
+backend/.env
+**/application-local.yml
+**/application-local.properties
+
+# ============ 构建产物 ============
+backend/target/
+backend/.m2repo/
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/
+**/__pycache__/
+*.log

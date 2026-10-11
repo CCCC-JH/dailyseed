@@ -1,0 +1,22 @@
+﻿diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\sw.js" "b/D:\\deepseek harness\\frontend\\public\\sw.js"
+index 7cf077c..06f1b2c 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\sw.js"	
++++ "b/D:\\deepseek harness\\frontend\\public\\sw.js"	
+@@ -8,7 +8,7 @@
+  *   · 静态资源（js/css/图标/字体）：cache-first —— 它们带内容哈希，不会过期。
+  *   · /api/** ：**完全不碰**。卡片数据必须实时，缓存它等于让用户看到昨天的卡。
+  */
+-const CACHE = 'dailyseed-shell-v1'
++const CACHE = 'dailyseed-shell-v2'
+ const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.png']
+ 
+ self.addEventListener('install', (event) => {
+@@ -24,7 +24,7 @@ self.addEventListener('activate', (event) => {
+   event.waitUntil(
+     caches
+       .keys()
+-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
++      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('dailyseed-shell-') && k !== CACHE).map((k) => caches.delete(k))))
+       .then(() => self.clients.claim()),
+   )
+ })

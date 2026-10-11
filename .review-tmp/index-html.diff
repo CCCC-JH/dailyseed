@@ -1,0 +1,20 @@
+﻿diff --git "a/D:\\deepseek harness\\_review_backup_20261011\\index.html" "b/D:\\deepseek harness\\frontend\\index.html"
+index b284ba1..4e8cdcf 100644
+--- "a/D:\\deepseek harness\\_review_backup_20261011\\index.html"	
++++ "b/D:\\deepseek harness\\frontend\\index.html"	
+@@ -4,12 +4,12 @@
+     <meta charset="UTF-8" />
+     <meta
+       name="viewport"
+-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
++      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+     />
+-    <meta name="theme-color" content="#0f1115" />
++    <meta name="theme-color" content="#f8f7f2" />
+     <meta name="description" content="每天给你一个很小的约定。想做就做，觉得好就留下它。" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
++    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+     <meta name="apple-mobile-web-app-title" content="每日一粒" />
+     <link rel="manifest" href="/manifest.webmanifest" />
+     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />

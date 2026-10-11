@@ -1,0 +1,8 @@
+﻿TSX ������ 109 �� class������̬ƴ�ӵ� token��
+CSS �ﶨ���� 130 �� class
+====================================================================
+û�ж�Ӧ CSS ����� class��Ҫô�ǰ�д�ģ�Ҫô������д���ˣ���
+  pot--                      frontend\src\components\Pot.tsx
+====================================================================
+CSS �ﶨ�塢�� TSX ��û���ֵ� class��21 ������α��/״̬�࣬����ɨһ�۲к�����
+  btn--danger, btn--done, chip--harvest, chip--on, chip--seed, dot-sep, pot--1, pot--2, pot--3, pot--4, pot--tapped, seed-art, seed-art--small, synccode, synccode--missing, toast, toast--warn, today__card--swap, today__next, today__next-label, today__next-text

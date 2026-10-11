@@ -1,0 +1,87 @@
+﻿======================================================================
+base.css
+   15.0px  :root                                         
+   10.0px  :root                                         
+   10.0px  .kicker                                         ← 行内规则
+   27.0px  :root                                         
+   27.0px  .title                                          ← 行内规则
+   14.0px  :root                                         
+   14.0px  .lede                                           ← 行内规则
+   13.0px  :root                                         
+   13.0px  .muted                                          ← 行内规则
+   15.0px  :root                                         
+   15.0px  .section-head h2                                ← 行内规则
+   12.0px  :root                                         
+   12.0px  .section-head span                              ← 行内规则
+   14.0px  :root                                         
+   14.0px  .btn                                            ← 行内规则
+   13.0px  :root                                         
+   13.0px  .btn--quiet                                     ← 行内规则
+   12.0px  :root                                         
+   12.0px  .chip                                           ← 行内规则
+   22.0px  :root                                         
+   22.0px  .brand                                          ← 行内规则
+   11.0px  :root                                         
+   11.0px  .tab                                            ← 行内规则
+   14.0px  :root                                         
+   14.0px  .toast                                          ← 行内规则
+   12.0px  :root                                         
+   12.0px  .daily-note                                     ← 行内规则
+   14.0px  :root                                         
+   14.0px  .tab                                            ← 行内规则
+   16.0px  :root                                         
+   16.0px  .navigation__note p                             ← 行内规则
+   11.0px  :root                                         
+   11.0px  .navigation__note span                          ← 行内规则
+   27.0px  :root                                         
+   27.0px  .page-heading h1                                ← 行内规则
+   12.5px  :root                                           ← 半像素
+   12.5px  .page-heading .lede                             ← 行内规则
+======================================================================
+components.css
+   19.0px  .sheet__title                                 
+   13.0px  .sheet__sub                                   
+   11.5px  .evidence__label                                ← 半像素
+   14.5px  .evidence__text                                 ← 半像素
+   13.0px  .evidence__text--cite                         
+   12.5px  .evidence__note                                 ← 半像素
+   15.0px  .evidence__science h3                         
+   13.0px  .why                                          
+   11.5px  .why__glyph                                     ← 半像素
+   13.5px  .sill__empty                                    ← 半像素
+   12.5px  .pot__count                                     ← 半像素
+    9.0px  .pot__ready                                   
+   13.0px  .graduated__seal                              
+   14.0px  .graduated__text                              
+   12.0px  .graduated__date                              
+   25.0px  .synccode__value                              
+   15.0px  .synccode--missing .synccode__value           
+   12.5px  .share__hint                                    ← 半像素
+   14.5px  .row__label                                     ← 半像素
+   13.0px  .row__value                                   
+   23.0px  .cardback                                     
+   23.0px  .cardback__kicker                               ← 行内规则
+   13.0px  .cardback                                     
+   13.0px  .cardback__hint                                 ← 行内规则
+   14.0px  .today__card                                  
+   14.0px  .today__card-signature                          ← 行内规则
+   30.0px  .today__text                                  
+   13.5px  .today__kept                                    ← 半像素
+   13.5px  .today__next-label                              ← 半像素
+   12.5px  .today__next-text                               ← 半像素
+   13.0px  .today__indulge                               
+   12.5px  .today__date                                    ← 半像素
+   15.5px  .trail__text                                    ← 半像素
+   12.5px  .trail__meta                                    ← 半像素
+   13.5px  .remind__presets .chip                          ← 半像素
+   15.0px  .remind__time input                           
+   11.0px  .remind__time input[type='time']::-webkit-cale
+   11.0px  .pot__category                                  ← 行内规则
+   13.0px  .remind__time input[type='time']::-webkit-cale
+   13.0px  .pot__text                                      ← 行内规则
+   21.0px  .remind__time input[type='time']::-webkit-cale
+   21.0px  .cardback__kicker                               ← 行内规则
+   25.0px  .remind__time input[type='time']::-webkit-cale
+   25.0px  .today__text                                    ← 行内规则
+   11.0px  .remind__time input[type='time']::-webkit-cale
+   11.0px  .today__date                                    ← 行内规则

@@ -1,0 +1,6 @@
+# 构建上下文里不要带这些（node_modules 上百 MB，而且容器里会重新装一份）
+node_modules/
+dist/
+.npm-cache/
+npm-debug.log*
+.vite/

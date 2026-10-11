@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f8f7f2" />
+    <meta name="description" content="每天给你一个很小的约定。想做就做，觉得好就留下它。" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="每日一粒" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <!-- iOS 主屏幕图标用专门那张：public/icons/apple-touch-icon.png 实测 180×180，
+         正是 iOS 的推荐尺寸（原来这里指的是 icon-192.png，于是那张 180 的文件谁也没引用）。
+         ⚠️ 注意 `sizes`：iOS 不认 sizes 属性，它按文件名/位置约定，所以这里不给 sizes。 -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <title>每日一粒</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

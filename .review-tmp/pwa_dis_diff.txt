@@ -1,0 +1,84 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+<module>：指令流不同
+--- old
++++ new
+@@ -67,14 +67,14 @@
+ STORE_NAME               SW_SOURCE
+ BUILD_LIST               
+ STORE_NAME               results
+-LOAD_CONST               <code object fetch at 0x0000017A6FC8A660, file "tools\verify_pwa.py", line 35>
++LOAD_CONST               <code object fetch at 0x0000017A6FABAA70, file "D:\deepseek harness\tools\verify_pwa.py", line 35>
+ MAKE_FUNCTION            
+ STORE_NAME               fetch
+-LOAD_CONST               <code object head at 0x0000017A6F7F6F70, file "tools\verify_pwa.py", line 47>
++LOAD_CONST               <code object head at 0x0000017A6F7F6F70, file "D:\deepseek harness\tools\verify_pwa.py", line 47>
+ MAKE_FUNCTION            
+ STORE_NAME               head
+ LOAD_CONST               ('',)
+-LOAD_CONST               <code object check at 0x0000017A6FA3E790, file "tools\verify_pwa.py", line 54>
++LOAD_CONST               <code object check at 0x0000017A6FA3E790, file "D:\deepseek harness\tools\verify_pwa.py", line 54>
+ MAKE_FUNCTION            
+ SET_FUNCTION_ATTRIBUTE   defaults
+ STORE_NAME               check
+@@ -535,7 +535,7 @@
+ STORE_NAME               sizes
+ LOAD_CONST               ' '
+ LOAD_ATTR                join + NULL|self
+-LOAD_CONST               <code object <genexpr> at 0x0000017A6F9DBCC0, file "tools\verify_pwa.py", line 119>
++LOAD_CONST               <code object <genexpr> at 0x0000017A6F9DBCC0, file "D:\deepseek harness\tools\verify_pwa.py", line 119>
+ MAKE_FUNCTION            
+ LOAD_NAME                icons
+ GET_ITER                 
+@@ -547,7 +547,7 @@
+ LOAD_CONST               '⑪ ★ 图标覆盖 192 / 512 / maskable（缺哪个，哪个平台就不给装）'
+ LOAD_NAME                any
+ PUSH_NULL                
+-LOAD_CONST               <code object <genexpr> at 0x0000017A6FB92930, file "tools\verify_pwa.py", line 121>
++LOAD_CONST               <code object <genexpr> at 0x0000017A6FB92A30, file "D:\deepseek harness\tools\verify_pwa.py", line 121>
+ MAKE_FUNCTION            
+ LOAD_NAME                sizes
+ GET_ITER                 
+@@ -559,7 +559,7 @@
+ POP_TOP                  
+ LOAD_NAME                any
+ PUSH_NULL                
+-LOAD_CONST               <code object <genexpr> at 0x0000017A6FB92A30, file "tools\verify_pwa.py", line 121>
++LOAD_CONST               <code object <genexpr> at 0x0000017A6FB92930, file "D:\deepseek harness\tools\verify_pwa.py", line 121>
+ MAKE_FUNCTION            
+ LOAD_NAME                sizes
+ GET_ITER                 
+@@ -720,7 +720,8 @@
+ PUSH_NULL                
+ LOAD_NAME                SW_SOURCE
+ LOAD_CONST               'utf-8'
+-LOAD_CONST               ('encoding',)
++LOAD_CONST               ''
++LOAD_CONST               ('encoding', 'newline')
+ CALL_KW                  
+ BEFORE_WITH              
+ STORE_NAME               fh
+@@ -743,10 +744,16 @@
+ LOAD_NAME                len
+ PUSH_NULL                
+ LOAD_NAME                sw
++LOAD_ATTR                encode + NULL|self
++LOAD_CONST               'utf-8'
++CALL                     
+ CALL                     
+ LOAD_NAME                len
+ PUSH_NULL                
+ LOAD_NAME                src
++LOAD_ATTR                encode + NULL|self
++LOAD_CONST               'utf-8'
++CALL                     
+ CALL                     
+ BUILD_TUPLE              
+ BINARY_OP                %
+============================================================
+<module>/<genexpr>：指令流一致
+============================================================
+<module>/check：指令流一致
+============================================================
+<module>/fetch：指令流一致
+============================================================
+<module>/head：指令流一致
